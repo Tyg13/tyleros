@@ -1,0 +1,14 @@
+cmake_minimum_required (VERSION 3.10)
+
+enable_language(ASM_NASM)
+
+set(CAN_USE_ASSEMBLER TRUE)
+set(CMAKE_ASM_NASM_OBJECT_FORMAT bin)
+set(CMAKE_ASM_NASM_LINK_EXECUTABLE ":")
+project(tyleros C CXX ASM_NASM)
+
+set(BINARY_DIR "${CMAKE_SOURCE_DIR}/bin")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${BINARY_DIR}")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${BINARY_DIR}")
+
+add_subdirectory(src)
