@@ -1,10 +1,10 @@
-cmake_minimum_required (VERSION 3.10)
+cmake_minimum_required (VERSION 3.14)
 
-enable_language(ASM_NASM)
 
 set(CAN_USE_ASSEMBLER TRUE)
-set(CMAKE_ASM_NASM_OBJECT_FORMAT bin)
-set(CMAKE_ASM_NASM_LINK_EXECUTABLE ":")
+set(CMAKE_ASM_NASM_OBJECT_FORMAT elf64)
+set(CMAKE_ASM_NASM_LINK_EXECUTABLE "ld <CMAKE_ASM_NASM_LINK_FLAGS> <OBJECTS> -o <TARGET>")
+enable_language(ASM_NASM)
 project(tyleros C CXX ASM_NASM)
 
 set(BINARY_DIR "${CMAKE_SOURCE_DIR}/bin")

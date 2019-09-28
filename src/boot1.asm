@@ -1,4 +1,3 @@
-[ORG 0X500]
 [BITS 16]
 
 boot:
