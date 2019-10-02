@@ -1,20 +1,24 @@
 [BITS 16]
 
 boot:
+    ; Copy this boot sector to 0x0500
     mov si, 0x7c00
     mov di, 0x0500
     mov cx, 0x100
     rep movsd
+
     mov bx, .relocated
     jmp bx
 .relocated:
-    call read_next_boot_sector
+    call read_floppy_track
+
+    ; Jump to stage 2
     mov bx, 0x7c00
     jmp bx
 
-read_next_boot_sector:
+read_floppy_track:
     mov ah, 2
-    mov al, 1
+    mov al, 16
     xor ch, ch
     mov cl, 2
     xor dx, dx
