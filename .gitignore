@@ -1,3 +1,6 @@
 bin
 build
 *.log
+*.swo
+*.swp
+.gdbinit
