@@ -3,5 +3,5 @@
 set -e
 
 cd build
-cmake ..
-make
+cmake -DCMAKE_TOOLCHAIN_FILE=../toolchain/x86_64.cmake ..
+make $*
