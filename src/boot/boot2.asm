@@ -10,7 +10,8 @@ boot:
     mov ecx, 0x1000
     cld
     rep stosd
-; Identity map
+    
+    ; Identity map
     ; 0x0 - 0x200000
     mov di, PAGE_TABLE
     ; Page Map Level 4
