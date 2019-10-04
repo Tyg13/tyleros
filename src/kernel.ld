@@ -2,7 +2,6 @@ ENTRY(_start)
 
 SECTIONS
 {
-    /* Keep in sync with boot 2 */
     . = 0xC000000;
     .start :
     {

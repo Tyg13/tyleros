@@ -120,8 +120,8 @@ long_mode:
     mov rsi, 0x8000
     call load_elf_binary
 
-    ; Keep this address in sync with kernel.ld
-    mov rbx, 0xC000000
+    ; Virtual address to jump to will be returned in rdi
+    mov rbx, rdi
     jmp rbx
 
 times 510 - ($ - $$) db 0 ; Boot sector is 512 bytes

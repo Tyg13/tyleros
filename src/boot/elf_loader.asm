@@ -53,6 +53,8 @@ load_elf_binary:
     jnz .load_program_header
 
 .end:
+    ; Return address for bootloader to jump to
+    mov rdi, [p_vaddr]
     ret
 
 p_offset: dq 0
