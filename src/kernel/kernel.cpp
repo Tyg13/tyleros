@@ -7,11 +7,7 @@
 
 void kmain(void)
 {
-loop:
     load_idt();
-    int j = 1;
-    int i = 0;
-    int k = j / i;
-    (void) k;
+loop:
     goto loop;
 }
