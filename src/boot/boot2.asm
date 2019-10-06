@@ -3,9 +3,10 @@
 extern load_elf_binary
 
 boot:
-    ; Clear Page Map Level 4
     xor eax, eax
-    mov es, eax
+    mov es, ax
+
+    ; Clear Page Map Level 4
     mov di, PAGE_TABLE
     mov ecx, 0x1000
     cld
@@ -69,6 +70,8 @@ boot:
     nop
     nop
 
+    call build_memory_map
+
     lidt [idt]
 
     mov eax, CR4_PAE | CR4_PGE
@@ -91,6 +94,54 @@ boot:
 
     jmp CODE_SEG:long_mode
 
+[BITS 64]
+long_mode:
+    mov ax, DATA_SEG
+    mov ss, ax
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
+    mov rsi, 0x8000
+    call load_elf_binary
+
+    ; Virtual address to jump to will be returned in rdi
+    mov rbx, rdi
+    jmp rbx
+
+[BITS 16]
+build_memory_map:
+    xor ebp, ebp
+
+    mov di, MEMORY_MAP_BASE + 0x8
+    xor ebx, ebx
+    mov edx, 0x534D4150
+
+.entry:
+    mov eax, 0xE820
+    mov ecx, 24
+    int 0x15
+    jc .done
+
+    mov edx, 0x534D4150
+    cmp eax, edx
+    jne .done
+
+    inc bp
+
+    test ebx, ebx
+    je .done
+
+    add di, 24
+
+    jmp .entry
+
+.done:
+    mov di, MEMORY_MAP_BASE;
+    mov [es:di], bp
+    ret
+
 ALIGN 4
 idt:
     .length dw 0x0
@@ -109,27 +160,12 @@ ALIGN 4
     .size    dw $ - gdt - 1 
     .address dd gdt
 
-[BITS 64]
-long_mode:
-    mov ax, DATA_SEG
-    mov ss, ax
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
-
-    mov rsi, 0x8000
-    call load_elf_binary
-
-    ; Virtual address to jump to will be returned in rdi
-    mov rbx, rdi
-    jmp rbx
-
 times 510 - ($ - $$) db 0 ; Boot sector is 512 bytes
 dw 0xAA55 ; Boot signature
 
 CODE_SEG equ gdt.code - gdt
 DATA_SEG equ gdt.data - gdt
+MEMORY_MAP_BASE equ 0x1000
 PAGE_TABLE equ 0xA000
 PAGE_PRESENT equ (1 << 0)
 PAGE_WRITE   equ (1 << 1)
