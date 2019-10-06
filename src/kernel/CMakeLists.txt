@@ -5,7 +5,7 @@ add_library(crti.o  OBJECT crti.asm)
 add_library(crtn.o  OBJECT crtn.asm)
 add_library(start.o OBJECT start.asm)
 
-add_executable(kernel.elf
+add_executable(kernel.debug.elf
     $<TARGET_OBJECTS:crti.o>
     $<TARGET_OBJECTS:crtn.o>
     $<TARGET_OBJECTS:start.o>
@@ -14,12 +14,18 @@ add_executable(kernel.elf
 
     kernel.cpp
     idt.cpp
-    interrupts.cpp)
+    interrupts.cpp
+    memory.cpp)
 
 set_source_files_properties(interrupts.cpp PROPERTIES COMPILE_OPTIONS -mgeneral-regs-only)
 
 set(LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/kernel.ld")
-target_link_options   (kernel.elf PRIVATE -T${LINKER_SCRIPT} -ffreestanding -n -g)
-set_target_properties (kernel.elf PROPERTIES LINK_DEPENDS ${LINKER_SCRIPT})
-target_link_libraries (kernel.elf PRIVATE -nostdlib -lgcc)
-target_compile_options(kernel.elf PRIVATE -Wall -Werror -mno-red-zone -ffreestanding -fno-exceptions -fno-rtti -g)
+target_link_options   (kernel.debug.elf PRIVATE -T${LINKER_SCRIPT} -ffreestanding -n -g)
+set_target_properties (kernel.debug.elf PROPERTIES LINK_DEPENDS ${LINKER_SCRIPT})
+target_link_libraries (kernel.debug.elf PRIVATE -nostdlib -lgcc)
+target_compile_options(kernel.debug.elf PRIVATE -Wall -Werror -mno-red-zone -ffreestanding -fno-exceptions -fno-rtti -g -Os)
+
+add_custom_target(kernel.elf ALL
+    COMMAND strip -g $<TARGET_FILE:kernel.debug.elf> -o kernel.elf
+    DEPENDS kernel.debug.elf
+    WORKING_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
