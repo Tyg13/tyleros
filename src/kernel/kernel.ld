@@ -19,4 +19,14 @@ SECTIONS
         *crtend*(.fini)
         *crtn*(.fini)
     }
+    .ctors : {
+        *crtbegin*(.ctors)
+        *(EXCLUDE_FILE (*crtend*) .ctors)
+        *crtend*(.ctors)
+    }
+    .dtors : {
+        *crtbegin*(.dtors)
+        *(EXCLUDE_FILE (*crtend*) .dtors)
+        *crtend*(.dtors)
+    }
 }
