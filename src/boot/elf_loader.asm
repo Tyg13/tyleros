@@ -34,6 +34,7 @@ load_elf_binary:
 
     ; Clear block
     xor rax, rax
+    mov rdi, [p_vaddr]
     mov rcx, [p_memsz]
     rep stosb
 
