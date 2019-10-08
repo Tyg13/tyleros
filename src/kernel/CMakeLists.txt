@@ -14,19 +14,19 @@ add_executable(kernel.debug.elf
     ${CRTEND_OBJ}
     ${CRTBEGIN_OBJ}
 
-    kernel.cpp
     idt.cpp
     interrupts.cpp
+    kernel.cpp
     memory.cpp
     vga.cpp)
 
 set_source_files_properties(interrupts.cpp PROPERTIES COMPILE_OPTIONS -mgeneral-regs-only)
 
 set(LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/kernel.ld")
-target_link_options   (kernel.debug.elf PRIVATE -T${LINKER_SCRIPT} -ffreestanding -n -g)
+target_link_options   (kernel.debug.elf PRIVATE -T${LINKER_SCRIPT} -n)
 set_target_properties (kernel.debug.elf PROPERTIES LINK_DEPENDS ${LINKER_SCRIPT})
 target_link_libraries (kernel.debug.elf PRIVATE -nostdlib -lgcc)
-target_compile_options(kernel.debug.elf PRIVATE --std=c++2a -Wall -Werror -mno-red-zone -ffreestanding -fno-exceptions -fno-rtti -g -Os)
+target_compile_options(kernel.debug.elf PRIVATE --std=c++2a -fconcepts -Wall -Werror -mno-red-zone -ffreestanding -fno-exceptions -fno-rtti -g)
 
 add_custom_target(kernel.elf ALL
     COMMAND strip -g $<TARGET_FILE:kernel.debug.elf> -o kernel.elf
