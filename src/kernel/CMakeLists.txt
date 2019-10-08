@@ -4,11 +4,13 @@ execute_process(COMMAND ${CMAKE_CXX_COMPILER} ${CMAKE_CXX_FLAGS} -print-file-nam
 add_library(crti.o  OBJECT crti.asm)
 add_library(crtn.o  OBJECT crtn.asm)
 add_library(start.o OBJECT start.asm)
+add_library(sse.o   OBJECT sse.asm)
 
 add_executable(kernel.debug.elf
     $<TARGET_OBJECTS:crti.o>
     $<TARGET_OBJECTS:crtn.o>
     $<TARGET_OBJECTS:start.o>
+    $<TARGET_OBJECTS:sse.o>
     ${CRTEND_OBJ}
     ${CRTBEGIN_OBJ}
 
