@@ -17,7 +17,8 @@ add_executable(kernel.debug.elf
     kernel.cpp
     idt.cpp
     interrupts.cpp
-    memory.cpp)
+    memory.cpp
+    vga.cpp)
 
 set_source_files_properties(interrupts.cpp PROPERTIES COMPILE_OPTIONS -mgeneral-regs-only)
 
