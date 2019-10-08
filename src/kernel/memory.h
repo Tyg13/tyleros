@@ -11,13 +11,15 @@ struct memory_map_entry {
         nvs         = 4,
         badmemory   = 5,
     };
-    void    * base;
+    char    * base;
     uint64_t  length;
     type      type;
     uint32_t  extended_attributes = 1;
 }
 __attribute((packed));
 
-void sort_memory_map();
+void init_memory();
+
+void * get_physical_page();
 
 #endif
