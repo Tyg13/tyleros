@@ -26,19 +26,8 @@ boot:
     mov [es:di + 0x1000], eax
 
     ; Page Directory
-    lea eax, [es:di + 0x3000]
-    or eax, PAGE_PRESENT | PAGE_WRITE
+    mov eax, 0x0 | PAGE_PRESENT | PAGE_WRITE | PAGE_LARGE
     mov [es:di + 0x2000], eax
-
-    ; Page Table
-    lea di, [di + 0x3000]
-    mov eax, PAGE_PRESENT | PAGE_PRESENT
-.build_page_entry:
-    mov [es:di], eax
-    add eax, 0x1000
-    add di, 0x8
-    cmp eax, 0x200000
-    jb .build_page_entry
 
     mov eax, 0x1FFFF0
     mov esp, eax
@@ -169,6 +158,7 @@ MEMORY_MAP_BASE equ 0x1000
 PAGE_TABLE equ 0xA000
 PAGE_PRESENT equ (1 << 0)
 PAGE_WRITE   equ (1 << 1)
+PAGE_LARGE   equ (1 << 7)
 CR0_PAGE equ (1 << 31)
 CR0_PROT equ (1 << 0)
 CR4_PAE equ (1 << 5) 
