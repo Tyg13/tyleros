@@ -23,10 +23,12 @@ add_executable(kernel.debug.elf
 set_source_files_properties(interrupts.cpp PROPERTIES COMPILE_OPTIONS -mgeneral-regs-only)
 
 set(LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/kernel.ld")
-target_link_options   (kernel.debug.elf PRIVATE -T${LINKER_SCRIPT} -n)
-set_target_properties (kernel.debug.elf PROPERTIES LINK_DEPENDS ${LINKER_SCRIPT})
-target_link_libraries (kernel.debug.elf PRIVATE -nostdlib -lgcc)
-target_compile_options(kernel.debug.elf PRIVATE --std=c++2a -fconcepts -Wall -Werror -mno-red-zone -ffreestanding -fno-exceptions -fno-rtti -g)
+target_link_options       (kernel.debug.elf PRIVATE -T${LINKER_SCRIPT} -n -L$<TARGET_FILE_DIR:libk>)
+set_target_properties     (kernel.debug.elf PROPERTIES LINK_DEPENDS ${LINKER_SCRIPT})
+target_link_libraries     (kernel.debug.elf PRIVATE -nostdlib -lgcc libk)
+target_compile_options    (kernel.debug.elf PRIVATE --std=c++2a -Wall -Werror -mno-red-zone -ffreestanding -fno-exceptions -fno-rtti -g -mcmodel=kernel)
+get_target_property(LIBK_SOURCE_DIR libk SOURCE_DIR)
+target_include_directories(kernel.debug.elf PRIVATE SYSTEM ${LIBK_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} util)
 
 add_custom_target(kernel.elf ALL
     COMMAND strip -g $<TARGET_FILE:kernel.debug.elf> -o kernel.elf
