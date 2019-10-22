@@ -1,8 +1,13 @@
+jmp boot
+%include "elf_loader.asm"
+
 [BITS 16]
 
-extern load_elf_binary
-
 boot:
+    ; bp contains the address of where the kernel was loaded.
+    ; Store it for later
+    mov [kernel_address], ebp
+
     xor eax, eax
     mov es, ax
 
@@ -92,7 +97,8 @@ long_mode:
     mov fs, ax
     mov gs, ax
 
-    mov rsi, 0x8000
+    ; load_elf_binary expects rsi to contain the address of the kernel
+    mov rsi, [kernel_address]
     call load_elf_binary
 
     ; Virtual address to jump to will be returned in rdi
@@ -148,6 +154,8 @@ ALIGN 4
 .descriptor:
     .size    dw $ - gdt - 1 
     .address dd gdt
+
+kernel_address dq 0
 
 times 510 - ($ - $$) db 0 ; Boot sector is 512 bytes
 dw 0xAA55 ; Boot signature
