@@ -45,9 +45,10 @@ namespace vga {
       }
    }
 
-   auto vga_memory_base = reinterpret_cast<volatile uint16_t * const>(0xB8000);
+   constexpr auto VGA_MEMORY_BASE_ADDRESS = 0xB8000;
 
    static void write_color_char_at(const char c, color fg, color bg, cursor pos) {
+      auto vga_memory_base = reinterpret_cast<volatile uint16_t *>(VGA_MEMORY_BASE_ADDRESS);
       auto * screen_pos = vga_memory_base + pos.x + pos.y * SCREEN_WIDTH;
       auto color = (uint16_t) ((unsigned char) bg << 4 | (unsigned char) fg);
       *screen_pos = color << 8 | (uint16_t) c;
