@@ -13,4 +13,6 @@ set(BINARY_DIR "${CMAKE_SOURCE_DIR}/bin")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${BINARY_DIR}")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${BINARY_DIR}")
 
+set(COMMON_COMPILE_OPTIONS --std=c++2a -Wall -Werror -mno-red-zone -ffreestanding -fno-exceptions -fno-rtti -g -mcmodel=kernel)
+
 add_subdirectory(src)

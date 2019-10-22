@@ -27,7 +27,7 @@ set(LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/kernel.ld")
 target_link_options       (kernel.debug.elf PRIVATE -T${LINKER_SCRIPT} -n -L$<TARGET_FILE_DIR:libk>)
 set_target_properties     (kernel.debug.elf PROPERTIES LINK_DEPENDS ${LINKER_SCRIPT})
 target_link_libraries     (kernel.debug.elf PRIVATE -nostdlib -lgcc libk)
-target_compile_options    (kernel.debug.elf PRIVATE --std=c++2a -Wall -Werror -mno-red-zone -ffreestanding -fno-exceptions -fno-rtti -g -mcmodel=kernel)
+target_compile_options    (kernel.debug.elf PRIVATE ${COMMON_COMPILE_OPTIONS})
 get_target_property(LIBK_SOURCE_DIR libk SOURCE_DIR)
 target_include_directories(kernel.debug.elf PRIVATE SYSTEM ${LIBK_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} util)
 
