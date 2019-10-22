@@ -47,34 +47,34 @@ int sprintf(char * str, const char * fmt, ...) {
    va_list args;
    va_start(args, fmt);
 
-   while (*fmt++ != '\0') {
-      char c = *fmt;
-      char next = *(fmt + 1);
+   for (auto c = *fmt; c != '\0'; c = *++fmt) {
       if (c != '%') {
          put_char(c);
       }
-      else if (next == '%') {
-         put_char(c);
-         put_char(next);
-         ++fmt;
-      }
       else {
-         switch(next) {
-            case 's': {
-               for (auto arg = va_arg(args, const char *); *arg != '\0'; ++arg) {
-                  put_char(*arg);
+         auto next = *++fmt;
+         if (next == '%') {
+            put_char(c);
+            put_char(next);
+         }
+         else {
+            switch(next) {
+               case 's': {
+                  for (auto arg = va_arg(args, const char *); *arg != '\0'; ++arg) {
+                     put_char(*arg);
+                  }
+                  break;
                }
-               break;
-            }
-            case 'd': {
-               auto dec = va_arg(args, int);
-               put_digit(dec, 10);
-               break;
-            }
-            case 'x': {
-               auto hex = va_arg(args, int);
-               put_digit(hex, 16);
-               break;
+               case 'd': {
+                  auto dec = va_arg(args, int);
+                  put_digit(dec, 10);
+                  break;
+               }
+               case 'x': {
+                  auto hex = va_arg(args, int);
+                  put_digit(hex, 16);
+                  break;
+               }
             }
          }
       }
