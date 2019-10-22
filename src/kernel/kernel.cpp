@@ -1,14 +1,16 @@
 #include "kernel.h"
 
-#include "idt.h"
 #include "memory.h"
+#include "idt.h"
 #include "sse.h"
+#include "vga.h"
 
 void kmain(void)
 {
-    load_idt();
-    sort_memory_map();
-    enable_sse();
+   vga::clear_screen();
+   enable_sse();
+   init_interrupts();
+   init_memory();
 loop:
-    goto loop;
+   goto loop;
 }
