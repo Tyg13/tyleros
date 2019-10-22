@@ -30,6 +30,6 @@ struct IDT_Entry {
     };
 } __attribute((packed));
 
-void load_idt();
+void init_interrupts();
 
 #endif
