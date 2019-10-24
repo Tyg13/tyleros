@@ -4,8 +4,8 @@
 #include <stdint.h>
 
 struct IDTR {
-    uint16_t limit;
-    uint32_t base;
+   uint16_t limit;
+   uintptr_t base;
 }
 __attribute((packed));
 
@@ -31,5 +31,11 @@ struct IDT_Entry {
 } __attribute((packed));
 
 void init_interrupts();
+
+inline IDTR get_current_idtr() {
+   IDTR idtr;
+   asm volatile ("sidt %0" :: "m"(idtr));
+   return idtr;
+}
 
 #endif

@@ -6,7 +6,8 @@ KERNEL_LMA_BASE = 0x100000;
 SECTIONS
 {
     . = KERNEL_VMA_BASE;
-    __KERNEL_START__ = .;
+    __KERNEL_VMA_START__ = .;
+    __KERNEL_LMA_START__ = . - (KERNEL_VMA_BASE - KERNEL_LMA_BASE);
     .start : AT(ADDR(.start) - KERNEL_VMA_BASE + KERNEL_LMA_BASE)
     {
         *start.*(.text)
@@ -37,7 +38,8 @@ SECTIONS
         *(EXCLUDE_FILE (*crtend*) .dtors)
         *crtend*(.dtors)
     }
-    __KERNEL_END__ = .;
+    __KERNEL_VMA_END__ = .;
+    __KERNEL_LMA_END__ = . - (KERNEL_VMA_BASE - KERNEL_LMA_BASE);
 
     /DISCARD/ :
     {

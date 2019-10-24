@@ -19,6 +19,8 @@ add_executable(kernel.debug.elf
     interrupts.cpp
     kernel.cpp
     memory.cpp
+    pic.cpp
+    pit.cpp
     vga.cpp
     util/new.cpp)
 

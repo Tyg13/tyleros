@@ -63,7 +63,7 @@ void init_physical_memory_allocator() {
    physical_memory_base = reinterpret_cast<char*>((uintptr_t)largest_usable_memory_map_entry.base
                                                              & (~PAGE_SIZE));
 
-   page_bitmap = reinterpret_cast<decltype(page_bitmap)>(&__KERNEL_END__);
+   page_bitmap = reinterpret_cast<decltype(page_bitmap)>(&__KERNEL_VMA_END__);
 
    const auto number_of_pages = largest_usable_memory_map_entry.length / PAGE_SIZE;
    page_bitmap_size = (number_of_pages / PAGES_PER_BITMAP_ENTRY) * SIZE_OF_BITMAP_ENTRY;
@@ -141,7 +141,7 @@ void * kmmap(size_t n) {
    const auto page_directory_pointer_offset = (virtual_page_address & PAGE_DIRECTORY_POINTER_MASK) >> 30;
    const auto page_map_level_4_offset       = (virtual_page_address & PAGE_MAP_LEVEL_4_MASK      ) >> 39;
 
-   const auto allocate_level_if_null = [](auto& entry) {
+   const auto allocate_level_if_null = [](auto& entry) -> decltype(auto) {
       if (reinterpret_cast<char *>(entry) == nullptr) {
          auto new_page_address = reinterpret_cast<uintptr_t>(get_physical_page()) | PAGE_WRITE | PAGE_PRESENT;
          entry = reinterpret_cast<decltype(entry)>(new_page_address);

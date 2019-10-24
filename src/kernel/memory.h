@@ -23,7 +23,7 @@ using page_table       = volatile uintptr_t[512];
 using page_directory_table = volatile uintptr_t[512];
 using page_directory_pointer_table = volatile uintptr_t[512];
 using page_map_level_4_table = volatile uintptr_t *;
-constexpr static auto PAGE_LEVEL_SIZE = 512 * sizeof(void *);
+constexpr static auto PAGE_LEVEL_SIZE = 512 * sizeof(uintptr_t);
 
 void init_memory();
 
@@ -36,7 +36,11 @@ void kfree(void *);
 constexpr static auto PAGE_PRESENT  = 1 << 0;
 constexpr static auto PAGE_WRITE    = 1 << 1;
 
-extern char __KERNEL_START__;
-extern char __KERNEL_END__;
+extern char __KERNEL_VMA_START__;
+extern char __KERNEL_VMA_END__;
+extern char __KERNEL_LMA_START__;
+extern char __KERNEL_LMA_END__;
+
+const ptrdiff_t KERNEL_VMA_OFFSET = &__KERNEL_VMA_START__ - &__KERNEL_LMA_START__;
 
 #endif
