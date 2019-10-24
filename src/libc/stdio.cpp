@@ -3,8 +3,11 @@
 
 #include <stdarg.h>
 
-int sprintf(char * str, const char * fmt, ...) {
-   if (!fmt) return -1;
+int vsprintf(char * str, const char * fmt, va_list args) {
+   if (!fmt) {
+      return -1;
+   }
+
    int chars = 0;
    const auto put_char = [&](char c) {
       if(str) *str++ = c;
@@ -12,10 +15,10 @@ int sprintf(char * str, const char * fmt, ...) {
    };
 
    const auto put_digit = [&](auto value, auto base) {
+      char * digits_start = str;
       int i = chars;
       if (value == 0) {
-         put_char('0');
-         return;
+         return put_char('0');
       }
 
       bool is_negative = false;
@@ -41,11 +44,8 @@ int sprintf(char * str, const char * fmt, ...) {
       }
 
       int digits_len = chars - i;
-      strrev(str, digits_len);
+      strrev(digits_start, digits_len);
    };
-
-   va_list args;
-   va_start(args, fmt);
 
    for (auto c = *fmt; c != '\0'; c = *++fmt) {
       if (c != '%') {
@@ -70,8 +70,13 @@ int sprintf(char * str, const char * fmt, ...) {
                   put_digit(dec, 10);
                   break;
                }
+               case 'u': {
+                  auto dec = (unsigned long long) va_arg(args, unsigned long long);
+                  put_digit(dec, 10);
+                  break;
+               }
                case 'x': {
-                  auto hex = va_arg(args, int);
+                  auto hex = (unsigned long long) va_arg(args, unsigned long long);
                   put_digit(hex, 16);
                   break;
                }
@@ -82,7 +87,16 @@ int sprintf(char * str, const char * fmt, ...) {
 
    put_char('\0');
 
+   return chars;
+}
+
+int sprintf(char * str, const char * fmt, ...) {
+   va_list args;
+   va_start(args, fmt);
+
+   int ret = vsprintf(str, fmt, args);
+
    va_end(args);
 
-   return chars;
+   return ret;
 }

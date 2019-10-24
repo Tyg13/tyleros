@@ -25,6 +25,7 @@ size_t fwrite(const void *, size_t, size_t, FILE *);
 void setbuf(FILE *, char *);
 int vfprintf(FILE *, const char *, va_list);
 
+int vsprintf(char * str, const char * fmt, va_list args);
 int sprintf(char * str, const char * fmt, ...);
 
 #ifdef __cplusplus
