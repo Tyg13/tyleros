@@ -62,11 +62,14 @@ char * strcpy(char * dst, const char * src) {
 }
 
 char * strrev(char * src, int len) {
-   // len - 1 so we don't reverse the null separator
-   for (int i = len - 1; i > 0; --i) {
-      char tmp = src[i];
-      src[i] = src[len - i];
-      src[len - i] = tmp;
+   if (src) {
+      char * begin = src;
+      char * end = src + len - 1;
+      while (begin < end) {
+         auto tmp = *end;
+         *end-- = *begin;
+         *begin++ = tmp;
+      }
    }
    return src;
 }
