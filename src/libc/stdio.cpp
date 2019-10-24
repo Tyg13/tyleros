@@ -2,6 +2,7 @@
 #include "string.h"
 
 #include <stdarg.h>
+#include <stdint.h>
 
 int vsprintf(char * str, const char * fmt, va_list args) {
    if (!fmt) {
@@ -47,37 +48,92 @@ int vsprintf(char * str, const char * fmt, va_list args) {
       strrev(digits_start, digits_len);
    };
 
+   enum length {
+      none,
+      long_int,
+      long_long_int,
+   };
+
+   const auto get_length = [&]() {
+      switch (*fmt) {
+         case 'l':
+            ++fmt;
+            if (*fmt == 'l') {
+               ++fmt;
+               return long_long_int;
+            }
+            return long_int;
+         default:
+            return none;
+      }
+   };
+
    for (auto c = *fmt; c != '\0'; c = *++fmt) {
       if (c != '%') {
          put_char(c);
       }
       else {
-         auto next = *++fmt;
-         if (next == '%') {
+         ++fmt;
+         const auto length = get_length();
+         if (*(fmt + 1) == '%') {
             put_char(c);
-            put_char(next);
+            put_char('%');
          }
          else {
-            switch(next) {
+            int base = 10;
+            switch(*fmt) {
                case 's': {
                   for (auto arg = va_arg(args, const char *); *arg != '\0'; ++arg) {
                      put_char(*arg);
                   }
                   break;
                }
+               case 'i':
                case 'd': {
-                  auto dec = va_arg(args, int);
-                  put_digit(dec, 10);
+                  switch (length) {
+                     case long_long_int: {
+                        auto arg = va_arg(args, long long int);
+                        put_digit(arg, base);
+                        break;
+                     }
+                     case long_int: {
+                        auto arg = va_arg(args, long int);
+                        put_digit(arg, base);
+                        break;
+                     }
+                     default: {
+                        auto arg = va_arg(args, int);
+                        put_digit(arg, base);
+                        break;
+                     }
+                  }
                   break;
                }
+               case 'x':
+                  base = 16;
                case 'u': {
-                  auto dec = (unsigned long long) va_arg(args, unsigned long long);
-                  put_digit(dec, 10);
+                  switch (length) {
+                     case long_long_int: {
+                        auto arg = va_arg(args, unsigned long long int);
+                        put_digit(arg, base);
+                        break;
+                     }
+                     case long_int: {
+                        auto arg = va_arg(args, unsigned long int);
+                        put_digit(arg, base);
+                        break;
+                     }
+                     default: {
+                        auto arg = va_arg(args, unsigned int);
+                        put_digit(arg, base);
+                        break;
+                     }
+                  }
                   break;
                }
-               case 'x': {
-                  auto hex = (unsigned long long) va_arg(args, unsigned long long);
-                  put_digit(hex, 16);
+               case 'p': {
+                  auto addr = (uintptr_t) va_arg(args, void *);
+                  put_digit(addr, 16);
                   break;
                }
             }
