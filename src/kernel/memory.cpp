@@ -109,7 +109,8 @@ static void remove_allocation(allocation * node) {
 }
 
 void * kmalloc(size_t n) {
-   size_t size_with_header = n + sizeof(struct allocation *);
+   auto size_with_header = n + sizeof(struct allocation *);
+   size_with_header = ((size_with_header / PAGE_SIZE) + 1) * PAGE_SIZE;
    const auto virtual_address = get_virtual_pages(size_with_header);
 
    auto allocation = get_new_allocation(size_with_header);
