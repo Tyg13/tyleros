@@ -79,7 +79,7 @@ void init_kmalloc() {
    allocation_list->next                    = nullptr;
 }
 
-allocation * get_new_allocation() {
+static allocation * get_new_allocation(size_t n) {
    allocation * last = allocation_list;
    while (last->next) {
       last = last->next;
@@ -88,13 +88,15 @@ allocation * get_new_allocation() {
    const auto end_of_last_allocation_page_list = end_of_last_allocation + last->physical_page_list_size;
    auto new_allocation = reinterpret_cast<allocation *>(end_of_last_allocation_page_list);
    new_allocation->next = nullptr;
+   new_allocation->size = n;
+   new_allocation->physical_pages_used = reinterpret_cast<uintptr_t *>(new_allocation + 1);
 
    last->next = new_allocation;
 
    return new_allocation;
 }
 
-void remove_allocation(allocation * node) {
+static void remove_allocation(allocation * node) {
    // Unlink the allocation from the list
    auto * last = allocation_list;
    while (last->next) {
@@ -107,13 +109,12 @@ void remove_allocation(allocation * node) {
 }
 
 void * kmalloc(size_t n) {
-   const auto virtual_address = get_virtual_pages(n);
+   size_t size_with_header = n + sizeof(struct allocation *);
+   const auto virtual_address = get_virtual_pages(size_with_header);
 
-   auto allocation = get_new_allocation();
-   allocation->size = n;
-   allocation->physical_pages_used = reinterpret_cast<uintptr_t *>(allocation + 1);
+   auto allocation = get_new_allocation(size_with_header);
 
-   auto pages_needed = div_round_up(n, PAGE_SIZE);
+   auto pages_needed = div_round_up(size_with_header, PAGE_SIZE);
    for (size_t page = 0; page < pages_needed; ++page) {
       const auto page_offset  = page * PAGE_SIZE;
       const auto virtual_page_address = reinterpret_cast<uintptr_t>(virtual_address) + page_offset;
@@ -136,8 +137,12 @@ void kfree(void * p) {
    const auto header_address = reinterpret_cast<uintptr_t>(p) - sizeof(allocation *);
    const auto header = reinterpret_cast<allocation **>(header_address);
    const auto allocation = *header;
-   const auto virtual_address = p;
+
+   // Re-add this virtual address to the free list
+   const auto virtual_address = header;
    free_virtual_pages(virtual_address, allocation->size);
+
+   // Add each physical page used to the page stack, and unmap each page entry
    uintptr_t * entry = allocation->physical_pages_used;
    for (size_t page = 0; page < allocation->physical_page_list_size; ++page) {
       const auto physical_page_address = reinterpret_cast<void *>(*entry++);
