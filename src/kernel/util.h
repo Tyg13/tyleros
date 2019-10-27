@@ -4,9 +4,10 @@
 #include "util/type_traits.h"
 
 namespace kstd {
-   template <typename Element, typename ResultType>
-   void transform(Element array[], int num_of_elements, ResultType (*transform_element)(Element&)) {
+   template <typename Element, typename Transform>
+   void transform(Element array[], int num_of_elements, Transform transform_element) {
       for (auto i = 0; i < num_of_elements; ++i) {
+         using ResultType = decltype(transform_element(array[i]));
          if constexpr (is_same_v<ResultType, bool>) {
             if (transform_element(array[i])) {
                return;
@@ -28,5 +29,7 @@ namespace kstd {
       }
    }
 }
+
+inline constexpr auto div_round_up = [](const auto& a, const auto &b) { return a / b + (a % b != 0); };
 
 #endif
