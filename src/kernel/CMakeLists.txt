@@ -19,9 +19,12 @@ add_executable(kernel.debug.elf
     interrupts.cpp
     kernel.cpp
     memory.cpp
+    paging.cpp
     pic.cpp
     pit.cpp
+    pma.cpp
     vga.cpp
+    vma.cpp
     util/new.cpp)
 
 set_source_files_properties(interrupts.cpp PROPERTIES COMPILE_OPTIONS -mgeneral-regs-only)

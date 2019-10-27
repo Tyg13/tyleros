@@ -30,13 +30,20 @@ boot:
     or eax, PAGE_PRESENT | PAGE_WRITE
     mov [es:di + 0x1000], eax
 
-    ; Page Directory
-    mov eax, 0x0 | PAGE_PRESENT | PAGE_WRITE | PAGE_LARGE
+    ; Page Directory Entry
+    lea eax, [es:di + 0x3000]
+    or eax, PAGE_PRESENT | PAGE_WRITE
     mov [es:di + 0x2000], eax
 
-    mov eax, 0x1FFFF0
-    mov esp, eax
-    mov ebp, esp
+    ; Page Table Entry
+    lea di, [di + 0x3000]
+    mov eax, PAGE_PRESENT | PAGE_PRESENT
+.build_page_entry:
+    mov [es:di], eax
+    add eax, 0x1000
+    add di, 0x8
+    cmp eax, 0x200000
+    jb .build_page_entry
 
     ;Map kernel pages
     ;0xC000000 - 0xC200000 to 0x100000 - 0x300000
@@ -48,8 +55,7 @@ boot:
 
     ; Page Table Entry
     lea di, [di + 0x4000]
-    mov eax, 0x100000
-    or eax, PAGE_PRESENT | PAGE_PRESENT
+    mov eax, 0x100000 | PAGE_PRESENT | PAGE_PRESENT
 .build_kernel_page_entry:
     mov [es:di], eax
     add eax, 0x1000

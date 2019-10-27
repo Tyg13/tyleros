@@ -12,23 +12,23 @@ struct memory_map_entry {
         nvs         = 4,
         badmemory   = 5,
     };
-    char *    base;
+    uintptr_t base;
     uint64_t  length;
     type      type;
     uint32_t  extended_attributes = 1;
 }
 __attribute((packed));
 
-using page_table       = volatile uintptr_t[512];
-using page_directory_table = volatile uintptr_t[512];
-using page_directory_pointer_table = volatile uintptr_t[512];
-using page_map_level_4_table = volatile uintptr_t *;
-constexpr static auto PAGE_LEVEL_SIZE = 512 * sizeof(uintptr_t);
+using memory_map = memory_map_entry[];
+
+extern memory_map& g_memory_map;
+
+memory_map& get_memory_map();
+
+// 4KiB pages
+constexpr static int PAGE_SIZE = 0x1000;
 
 void init_memory();
-
-void * kmmap(size_t n);
-void kunmap(void *);
 
 void * kmalloc(size_t count);
 void kfree(void *);
