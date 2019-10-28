@@ -63,7 +63,7 @@ boot:
     cmp eax, 0x300000
     jb .build_kernel_page_entry
 
-    ; Disable IRQs
+    ; Mask all IRQs
     mov al, 0xFF
     out 0xA1, al
     out 0x21, al
@@ -103,13 +103,15 @@ long_mode:
     mov fs, ax
     mov gs, ax
 
+    ; Place kernel stack at the end of the last kernel page
+    mov rsp, 0xC200000
+
     ; load_elf_binary expects rsi to contain the address of the kernel
     mov rsi, [kernel_address]
     call load_elf_binary
 
     ; Virtual address to jump to will be returned in rdi
-    mov rbx, rdi
-    jmp rbx
+    jmp rdi
 
 [BITS 16]
 build_memory_map:
