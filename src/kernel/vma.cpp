@@ -10,24 +10,45 @@ struct free_node {
    free_node * next;
 };
 
-// TODO grow the free list when it hits max_free_list_size
 free_node * virtual_free_list;
 size_t free_list_size;
 size_t max_free_list_size;
 constexpr auto NODES_PER_PAGE = PAGE_SIZE / sizeof(free_node);
 
 static void add_node_to_free_list(void * base, size_t size) {
-   // TODO merge free blocks if they are adjacent
-   free_node * last = virtual_free_list;
-   while (last->next) {
-      last = last->next;
+   auto node = virtual_free_list;
+   auto last = node;
+
+   // Walk free list, looking for nodes to merge with if possible
+   while (node) {
+      const auto end_of_current_node = reinterpret_cast<uintptr_t>(node->base) + node->size;
+      const auto end_of_new_node     = reinterpret_cast<uintptr_t>(base) + size;
+      // If the area to be freed is just before an existing free node,
+      // move the base of the node to the base of the free area and
+      // increase the node's size accordingly
+      if (node->base == reinterpret_cast<void*>(end_of_new_node)) {
+         node->base = base;
+         node->size += size;
+         return;
+      }
+      // If the area to be freed is at the end of an existing free node,
+      // just increase the size of the free node
+      else if (base == reinterpret_cast<void *>(end_of_current_node)) {
+         node->size += size;
+         return;
+      }
+      last = node;
+      node = node->next;
    }
 
+   // Otherwise, no adjacent nodes exist.
+   // Create a new node after the last to store the free area.
    auto new_node = last + 1;
    *new_node = free_node { base, size, nullptr };
 
    last->next = new_node;
 
+   // TODO: grow the free list when it hits max_free_list_size
    ++free_list_size;
 }
 
