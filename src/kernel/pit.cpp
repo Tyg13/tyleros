@@ -25,5 +25,5 @@ void init_pit() {
    io::out(PIT_0_DATA, reload_count_hi);
 
    // Unmask the PIT interrupt
-   io::out(PIC1_DATA, 0);
+   unmask_irq(0);
 }
