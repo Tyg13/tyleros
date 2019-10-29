@@ -74,13 +74,13 @@ int vsprintf(char * str, const char * fmt, va_list args) {
       }
       else {
          ++fmt;
-         const auto length = get_length();
-         if (*(fmt + 1) == '%') {
+         if (*fmt == '%') {
             put_char(c);
             put_char('%');
          }
          else {
-            int base = 10;
+            const auto length = get_length();
+            auto base = 10;
             switch(*fmt) {
                case 's': {
                   for (auto arg = va_arg(args, const char *); *arg != '\0'; ++arg) {
