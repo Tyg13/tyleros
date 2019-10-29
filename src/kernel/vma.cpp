@@ -63,7 +63,7 @@ void init_virtual_memory_allocator() {
    virtual_free_list->base = 0;
    virtual_free_list->size = 0;
    virtual_free_list->next = nullptr;
-   //
+
    // TODO: should walk the page tables to determine which virtual addresses
    // are free, since we identity map pages for the physical frame allocator and
    // the virtual memory allocator
@@ -78,8 +78,10 @@ void init_virtual_memory_allocator() {
 }
 
 void * get_virtual_pages(size_t n) {
+   // Keep track of the previous node in case we need to remove a node from the free list.
    free_node * prev = nullptr;
-   // Walk the free list for a node of appropriate size
+
+   // Walk the free list for a node of appropriate size.
    for (free_node * node = virtual_free_list; node != nullptr; prev = node, node = node->next) {
       // Found a node big enough
       if (node->size >= n) {
@@ -87,10 +89,12 @@ void * get_virtual_pages(size_t n) {
          // If the node isn't the exact size of the request, split it
          const auto remaining_size_in_node = node->size - n;
          if (remaining_size_in_node != 0) {
-            node->base = reinterpret_cast<void *>(reinterpret_cast<uintptr_t>(node->base) + n);
+            const auto end_of_requested_area = reinterpret_cast<uintptr_t>(node->base) + n;
+            node->base = reinterpret_cast<void *>(end_of_requested_area);
             node->size = remaining_size_in_node;
-         } else {
-            // Remove the node entirely from the list
+         }
+         // Otherwise, remove the node entirely from the list
+         else {
             if (prev) {
                prev->next = node->next;
             }
