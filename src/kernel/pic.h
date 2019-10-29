@@ -12,4 +12,7 @@ constexpr static uint8_t END_OF_INTERRUPT = 0x20;
 
 void remap_pic();
 
+void mask_irq  (int irq);
+void unmask_irq(int irq);
+
 #endif
