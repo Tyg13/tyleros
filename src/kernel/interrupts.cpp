@@ -4,8 +4,11 @@
 #include "pic.h"
 #include "vga.h"
 
+#include <stdio.h>
+
 #define INTERRUPT __attribute__((interrupt))
 
+INTERRUPT void page_fault_handler(interrupt_frame* frame, size_t error_code);
 INTERRUPT void timer_handler(interrupt_frame* frame);
 INTERRUPT void keyboard_handler(interrupt_frame * frame);
 INTERRUPT void pic1_irq_handler(interrupt_frame* frame);
@@ -19,12 +22,26 @@ INTERRUPT void exception_handler(interrupt_frame* frame, size_t error_code);
 uintptr_t get_interrupt_handler(unsigned int vector_index) {
    constexpr auto cast = [](const auto & handler) { return reinterpret_cast<uintptr_t>(handler); };
    switch (vector_index) {
+      case 0x0E:          return cast(page_fault_handler);
       case 0x20:          return cast(timer_handler);
       case 0x21:          return cast(keyboard_handler);
       case 0x22 ... 0x27: return cast(pic1_irq_handler);
       case 0x28:          return cast(real_time_clock_handler);
       case 0x29 ... 0x2F: return cast(pic2_irq_handler);
       default:            return cast(interrupt_handler);
+   }
+}
+
+void page_fault_handler(interrupt_frame* frame, size_t error_code) {
+   void * fault_address;
+   asm volatile ("mov %%cr2, %0" : "=g"(fault_address));
+   char message[sizeof("Page fault occurred accessing 0x0000000000000000\n")];
+   sprintf(message, "Page fault occurred accessing 0x%p\n", fault_address);
+   vga::string(message).write();
+
+   const auto page_not_present = (error_code ^ 1) != 0;
+   if (page_not_present) {
+      vga::string("Page was not present!\n").write();
    }
 }
 
