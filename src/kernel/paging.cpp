@@ -79,4 +79,6 @@ void unmap_page(void * virtual_page) {
 
    auto &page_entry = get_page_entry<false>(virtual_page_address);
    page_entry ^= PAGE_PRESENT;
+
+   asm volatile("invlpg (%0)" :: "b"(virtual_page_address) : "memory");
 }
