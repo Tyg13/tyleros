@@ -1,4 +1,4 @@
 #!/bin/bash
 
-bochs -q -log run.log &>/dev/null &
+bochs -q &>/dev/null &
 gdb -tui
