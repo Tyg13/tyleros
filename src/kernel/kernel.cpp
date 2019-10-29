@@ -1,14 +1,14 @@
 #include "kernel.h"
 
 #include "gdt.h"
-#include "pit.h"
-#include "memory.h"
 #include "idt.h"
+#include "memory.h"
 #include "sse.h"
 #include "vga.h"
 
 #include "stdio.h"
 
+__attribute__((format (printf, 1, 2)))
 void kprintf(const char * fmt, ...) {
    va_list args;
 
@@ -23,16 +23,8 @@ void kprintf(const char * fmt, ...) {
    va_end(args);
 
    vga::string(str).write();
-}
 
-extern volatile unsigned int ticks_elapsed;
-void sleep(unsigned int seconds) {
-   ticks_elapsed = 0;
-
-   unsigned int ticks_needed = seconds * PIT_BASE_RELOAD_FREQUENCY;
-   while (ticks_elapsed < ticks_needed) {
-      asm volatile("pause");
-   }
+   kfree(str);
 }
 
 void kmain(void)
@@ -42,6 +34,6 @@ void kmain(void)
    init_gdt();
    init_interrupts();
    init_memory();
-   const auto& idtr = get_current_idtr();
-   kprintf("IDTR size: %u\nIDTR base: %x", idtr.limit, idtr.base);
+loop:
+   goto loop;
 }
