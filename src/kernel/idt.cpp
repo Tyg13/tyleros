@@ -1,5 +1,6 @@
 #include "idt.h"
 
+#include "cmos.h"
 #include "interrupts.h"
 #include "memory.h"
 #include "pic.h"
@@ -18,6 +19,7 @@ void init_interrupts() {
    remap_pic();
    load_idt();
    init_pit();
+   init_real_time_clock();
    asm volatile ("sti" ::: "memory", "cc");
 }
 

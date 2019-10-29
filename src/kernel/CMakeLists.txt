@@ -14,6 +14,7 @@ add_executable(kernel.debug.elf
     ${CRTEND_OBJ}
     ${CRTBEGIN_OBJ}
 
+    cmos.cpp
     gdt.cpp
     idt.cpp
     interrupts.cpp
