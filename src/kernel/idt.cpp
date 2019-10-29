@@ -20,6 +20,7 @@ void init_interrupts() {
    load_idt();
    init_pit();
    init_real_time_clock();
+   unmask_irq(1);
    asm volatile ("sti" ::: "memory", "cc");
 }
 

@@ -37,7 +37,14 @@ namespace vga {
          if (c == '\n') {
             current_cursor.x = 0;
             advance_y_if_needed(current_cursor);
-         } else {
+         }
+         else if (c == '\b') {
+            if (--current_cursor.x < 0) {
+               current_cursor.x = 0;
+            }
+            write_color_char_at(' ', color::black, color::black, current_cursor);
+         }
+         else {
             write_color_char_at(c, foreground, background, current_cursor);
             advance(current_cursor);
          }
