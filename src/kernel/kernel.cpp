@@ -5,28 +5,12 @@
 #include "memory.h"
 #include "scheduler.h"
 #include "sse.h"
+#include "util.h"
 #include "vga.h"
 
 #include <stdio.h>
 
-__attribute__((format (printf, 1, 2)))
-void kprintf(const char * fmt, ...) {
-   va_list args;
 
-   va_start(args, fmt);
-   auto buff_size = vsprintf(NULL, fmt, args);
-   va_end(args);
-
-   char * str = (char *)kmalloc(buff_size * sizeof(char));
-
-   va_start(args, fmt);
-   vsprintf(str, fmt, args);
-   va_end(args);
-
-   vga::string(str).write();
-
-   kfree(str);
-}
 
 void kmain(void)
 {

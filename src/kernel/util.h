@@ -1,7 +1,12 @@
 #ifndef UTIL_H
 #define UTIL_H
 
+#include "memory.h"
 #include "util/type_traits.h"
+#include "vga.h"
+
+#include <stdio.h>
+#include <stdarg.h>
 
 namespace kstd {
    template <typename Element, typename Transform>
@@ -31,5 +36,24 @@ namespace kstd {
 }
 
 inline constexpr auto div_round_up = [](const auto& a, const auto &b) { return a / b + (a % b != 0); };
+
+__attribute__((format (printf, 1, 2)))
+inline void kprintf(const char * fmt, ...) {
+   va_list args;
+
+   va_start(args, fmt);
+   auto buff_size = vsprintf(NULL, fmt, args);
+   va_end(args);
+
+   char * str = new char[buff_size];
+
+   va_start(args, fmt);
+   vsprintf(str, fmt, args);
+   va_end(args);
+
+   vga::string(str).write();
+
+   kfree(str);
+}
 
 #endif
