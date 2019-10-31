@@ -87,9 +87,14 @@ static allocation * get_new_allocation(size_t n) {
    const auto end_of_last_allocation = reinterpret_cast<uintptr_t *>(last + 1);
    const auto end_of_last_allocation_page_list = end_of_last_allocation + last->physical_page_list_size;
    auto new_allocation = reinterpret_cast<allocation *>(end_of_last_allocation_page_list);
+
+   const auto pages_needed = div_round_up(n, PAGE_SIZE);
+   memset(new_allocation, 0, sizeof(allocation) + pages_needed * sizeof(uintptr_t));
+
    new_allocation->next = nullptr;
    new_allocation->size = n;
    new_allocation->physical_pages_used = reinterpret_cast<uintptr_t *>(new_allocation + 1);
+   new_allocation->physical_page_list_size = pages_needed;
 
    last->next = new_allocation;
 
@@ -115,7 +120,8 @@ void * kmalloc(size_t n) {
 
    auto allocation = get_new_allocation(size_with_header);
 
-   auto pages_needed = div_round_up(size_with_header, PAGE_SIZE);
+   const auto pages_needed = allocation->physical_page_list_size;
+
    for (size_t page = 0; page < pages_needed; ++page) {
       const auto page_offset  = page * PAGE_SIZE;
       const auto virtual_page_address = reinterpret_cast<uintptr_t>(virtual_address) + page_offset;
@@ -123,7 +129,6 @@ void * kmalloc(size_t n) {
       const auto physical_page = get_physical_page();
       map_page(physical_page, virtual_page);
 
-      ++allocation->physical_page_list_size;
       allocation->physical_pages_used[page] = reinterpret_cast<uintptr_t>(physical_page);
    }
 
