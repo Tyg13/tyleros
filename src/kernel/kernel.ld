@@ -9,11 +9,7 @@ SECTIONS
     . = KERNEL_VMA_BASE;
     __KERNEL_VMA_START__ = .;
     __KERNEL_LMA_START__ = . - KERNEL_VMA_OFFSET;
-    .start : AT(ADDR(.start) - KERNEL_VMA_OFFSET)
-    {
-        *start.*(.text)
-    }
-    .init :
+    .init : AT(ADDR(.init) - KERNEL_VMA_OFFSET)
     {
         *crti*(.init)
         *crtbegin*(.init)

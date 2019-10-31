@@ -46,7 +46,7 @@ load_elf_binary:
 
 .end:
     ; Return address for bootloader to jump to
-    mov rdi, r12
+    mov rdi, [r8 + 0x18] ; Program entry position
     ret
 
 ELF_MAGIC equ `\x7fELF`
