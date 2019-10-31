@@ -3,10 +3,11 @@
 #include "gdt.h"
 #include "idt.h"
 #include "memory.h"
+#include "scheduler.h"
 #include "sse.h"
 #include "vga.h"
 
-#include "stdio.h"
+#include <stdio.h>
 
 __attribute__((format (printf, 1, 2)))
 void kprintf(const char * fmt, ...) {
@@ -32,8 +33,9 @@ void kmain(void)
    vga::clear_screen();
    enable_sse();
    init_gdt();
-   init_interrupts();
    init_memory();
+   init_scheduler();
+   init_interrupts();
 loop:
    goto loop;
 }

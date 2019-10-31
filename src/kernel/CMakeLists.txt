@@ -5,7 +5,8 @@ add_library(asm.o  OBJECT
    crti.asm
    crtn.asm
    start.asm
-   sse.asm)
+   sse.asm
+   task.asm)
 target_compile_options (asm.o PRIVATE "-g")
 
 add_executable(kernel.debug.elf
@@ -23,6 +24,7 @@ add_executable(kernel.debug.elf
     pic.cpp
     pit.cpp
     pma.cpp
+    scheduler.cpp
     vga.cpp
     vma.cpp
     util/new.cpp)
