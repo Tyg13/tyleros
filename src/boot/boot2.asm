@@ -4,7 +4,7 @@ jmp boot
 [BITS 16]
 
 boot:
-    ; bp contains the address of where the kernel was loaded.
+    ; ebp contains the address of where the kernel was loaded.
     ; Store it for later
     mov [kernel_address], ebp
 
