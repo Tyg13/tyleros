@@ -1,16 +1,15 @@
 execute_process(COMMAND ${CMAKE_CXX_COMPILER} ${CMAKE_CXX_FLAGS} -print-file-name=crtbegin.o OUTPUT_VARIABLE CRTBEGIN_OBJ OUTPUT_STRIP_TRAILING_WHITESPACE)
 execute_process(COMMAND ${CMAKE_CXX_COMPILER} ${CMAKE_CXX_FLAGS} -print-file-name=crtend.o   OUTPUT_VARIABLE CRTEND_OBJ   OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-add_library(crti.o  OBJECT crti.asm)
-add_library(crtn.o  OBJECT crtn.asm)
-add_library(start.o OBJECT start.asm)
-add_library(sse.o   OBJECT sse.asm)
+add_library(asm.o  OBJECT
+   crti.asm
+   crtn.asm
+   start.asm
+   sse.asm)
+target_compile_options (asm.o PRIVATE "-g")
 
 add_executable(kernel.debug.elf
-    $<TARGET_OBJECTS:crti.o>
-    $<TARGET_OBJECTS:crtn.o>
-    $<TARGET_OBJECTS:start.o>
-    $<TARGET_OBJECTS:sse.o>
+    $<TARGET_OBJECTS:asm.o>
     ${CRTEND_OBJ}
     ${CRTBEGIN_OBJ}
 
