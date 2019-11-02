@@ -56,4 +56,34 @@ inline void kprintf(const char * fmt, ...) {
    kfree(str);
 }
 
+inline void vassert(bool value, const char * msg, va_list args) {
+   if (!value) {
+      if (msg) {
+         char buffer[512];
+         vsprintf(buffer, msg, args);
+
+         vga::string(buffer).write();
+      }
+   asm volatile ("hlt");
+loop: goto loop;
+   }
+}
+
+__attribute__((format (printf, 2, 3)))
+inline void assert(bool value, const char * msg, ...) {
+   va_list args;
+   va_start(args, msg);
+   vassert(value, msg, args);
+   va_end(args);
+}
+
+[[noreturn]]
+__attribute__((format (printf, 1, 2)))
+inline void panic(const char * msg, ...) {
+   va_list args;
+   va_start(args, msg);
+   vassert(false, msg, args);
+   __builtin_unreachable();
+}
+
 #endif
