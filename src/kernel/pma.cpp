@@ -42,11 +42,15 @@ void init_physical_memory_allocator() {
 
 void * get_physical_page() {
    if (top_of_page_stack > base_of_page_stack) {
-      return reinterpret_cast<void *>(*--top_of_page_stack);
+      const auto new_page = reinterpret_cast<void *>(*--top_of_page_stack);
+      assert(new_page != nullptr, "Top of page stack is null!");
+      return new_page;
    }
+   panic("Allocation failed, out of physical pages!");
    return nullptr;
 }
 
 void free_physical_page(void * page) {
+   assert(page != nullptr, "Page being freed is null!");
    *top_of_page_stack++ = reinterpret_cast<uintptr_t>(page);
 }

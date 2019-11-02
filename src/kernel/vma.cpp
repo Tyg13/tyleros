@@ -3,6 +3,7 @@
 #include "memory.h"
 #include "paging.h"
 #include "pma.h"
+#include "util.h"
 
 struct free_node {
    void      * base;
@@ -78,6 +79,7 @@ void init_virtual_memory_allocator() {
 }
 
 void * get_virtual_pages(size_t n) {
+   assert(n != 0, "Tried to allocate page of size 0!");
    // Keep track of the previous node in case we need to remove a node from the free list.
    free_node * prev = nullptr;
 
@@ -107,9 +109,12 @@ void * get_virtual_pages(size_t n) {
          return free_page_address;
       }
    }
+   panic("Allocation failed, out of virtual pages!");
    return nullptr;
 }
 
 void free_virtual_pages(void * address, size_t size) {
+   assert(address != nullptr, "Tried to free page at 0x0!");
+   assert(size    != 0,       "Tried to free page of size 0!");
    add_node_to_free_list(address, size);
 }

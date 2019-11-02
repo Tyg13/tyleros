@@ -1,6 +1,7 @@
 #include "paging.h"
 
 #include "memory.h"
+#include "util.h"
 
 #include <string.h>
 
@@ -71,6 +72,12 @@ void map_page(void * physical_page, void * virtual_page) {
    auto virtual_page_address = reinterpret_cast<uintptr_t>(virtual_page);
 
    auto& page_entry = get_page_entry<true>(virtual_page_address);
+
+   assert(!(page_entry & PAGE_PRESENT),
+         "Tried to map already-present page!\n"
+         "Virtual :%p\n"
+         "Physical:%p", virtual_page, physical_page);
+
    page_entry = reinterpret_cast<uintptr_t>(physical_page) | PAGE_WRITE | PAGE_PRESENT;
 }
 
@@ -78,6 +85,11 @@ void unmap_page(void * virtual_page) {
    auto virtual_page_address = reinterpret_cast<uintptr_t>(virtual_page);
 
    auto &page_entry = get_page_entry<false>(virtual_page_address);
+
+   assert(page_entry & PAGE_PRESENT,
+         "Tried to unmap non-present page\n"
+         "Virtual:%p", virtual_page);
+
    page_entry ^= PAGE_PRESENT;
 
    asm volatile("invlpg (%0)" :: "b"(virtual_page_address) : "memory");
