@@ -1,5 +1,7 @@
 #include "vga.h"
 
+#include "mutex.h"
+
 #include <stdint.h>
 
 namespace vga {
@@ -28,7 +30,11 @@ namespace vga {
          advance_y_if_needed(cursor);
       };
 
+   mutex write_lock;
+
    void string::write() && {
+      mutex_guard lock(write_lock);
+
       if (position != null_cursor) {
          current_cursor = position;
       }
