@@ -3,6 +3,7 @@
 #include "cmos.h"
 #include "pic.h"
 #include "scheduler.h"
+#include "util.h"
 #include "vga.h"
 
 #include <stdio.h>
@@ -38,13 +39,25 @@ uintptr_t get_interrupt_handler(unsigned int vector_index) {
 void page_fault_handler(interrupt_frame* frame, size_t error_code) {
    void * fault_address;
    asm volatile ("mov %%cr2, %0" : "=g"(fault_address));
-   char message[sizeof("Page fault occurred accessing 0x0000000000000000\n")];
-   sprintf(message, "Page fault occurred accessing 0x%p\n", fault_address);
+   const auto access_was_read = (error_code ^ (1 << 2)) != 0;
+   const auto action = access_was_read ? "reading" : "writing to";
+   char message[512];
+   sprintf(message, "Page fault occurred %s 0x%p\n", action, fault_address);
+   vga::string(message).write();
+
+   sprintf(message,
+         "RIP:     0x%lx\n"
+         "CS:      0x%lx\n"
+         "RFLAGS:  0x%lx\n"
+         "RSP:     0x%lx\n"
+         "SS:      0x%lx\n"
+         "TASK ID: %u\n",
+         frame->rip, frame->cs, frame->rflags, frame->rsp, frame->ss, get_current_task());
    vga::string(message).write();
 
    const auto page_not_present = (error_code ^ 1) != 0;
    if (page_not_present) {
-      vga::string("Page was not present!\n").write();
+      panic("Page was not present!\n");
    }
 }
 
