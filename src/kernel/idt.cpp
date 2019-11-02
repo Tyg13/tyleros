@@ -10,7 +10,6 @@ IDTR g_idtr;
 
 constexpr int IDT_Size = 0x100;
 
-alignas(0x1000)
 IDT_Entry idt[IDT_Size];
 
 static void load_idt();
