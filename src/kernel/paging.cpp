@@ -11,6 +11,9 @@ void init_paging() {
    uintptr_t base = 0;
    asm("mov %%cr3, %0" : "=g"(base));
    page_table_base = reinterpret_cast<decltype(page_table_base)>(base);
+
+   // Unmap the zero page so accesses through nullptr cause a page fault
+   unmap_page(0);
 }
 
 // Each prefix is 9 bits wide.
