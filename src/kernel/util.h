@@ -42,10 +42,10 @@ inline void kprintf(const char * fmt, ...) {
    va_list args;
 
    va_start(args, fmt);
-   auto buff_size = vsprintf(NULL, fmt, args);
+   const auto buff_size = vsprintf(NULL, fmt, args);
    va_end(args);
 
-   char * str = new char[buff_size];
+   const auto str = new char[buff_size];
 
    va_start(args, fmt);
    vsprintf(str, fmt, args);

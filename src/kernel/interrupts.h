@@ -4,15 +4,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
-typedef size_t uword_t __attribute__((mode (__word__)));
-
 struct interrupt_frame
 {
-    uword_t rip;
-    uword_t cs;
-    uword_t rflags;
-    uword_t rsp;
-    uword_t ss;
+    uint64_t rip;
+    uint64_t cs;
+    uint64_t rflags;
+    uint64_t rsp;
+    uint64_t ss;
 } __attribute__((packed));
 static_assert(sizeof(interrupt_frame) == 40);
 
