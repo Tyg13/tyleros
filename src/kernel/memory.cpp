@@ -1,5 +1,6 @@
 #include "memory.h"
 
+#include "mutex.h"
 #include "paging.h"
 #include "pma.h"
 #include "util.h"
@@ -90,7 +91,6 @@ static allocation * get_new_allocation(size_t n) {
 
    const auto pages_needed = div_round_up(n, PAGE_SIZE);
    memset(new_allocation, 0, sizeof(allocation) + pages_needed * sizeof(uintptr_t));
-
    new_allocation->next = nullptr;
    new_allocation->size = n;
    new_allocation->physical_pages_used = reinterpret_cast<uintptr_t *>(new_allocation + 1);
@@ -113,7 +113,11 @@ static void remove_allocation(allocation * node) {
    last->next = nullptr;
 }
 
+mutex malloc_lock;
+
 void * kmalloc(size_t n) {
+   mutex_guard lock(malloc_lock);
+
    auto size_with_header = n + sizeof(struct allocation *);
    size_with_header = ((size_with_header / PAGE_SIZE) + 1) * PAGE_SIZE;
    const auto virtual_address = get_virtual_pages(size_with_header);
@@ -136,10 +140,13 @@ void * kmalloc(size_t n) {
    *header = allocation;
 
    const auto address_after_header = reinterpret_cast<uintptr_t>(header) + sizeof(struct allocation *);
+
    return reinterpret_cast<void *>(address_after_header);
 }
 
 void kfree(void * p) {
+   mutex_guard lock(malloc_lock);
+
    const auto header_address = reinterpret_cast<uintptr_t>(p) - sizeof(allocation *);
    const auto header = reinterpret_cast<allocation **>(header_address);
    const auto allocation = *header;
