@@ -37,7 +37,7 @@ boot:
 
     ; Page Table Entry
     lea di, [di + 0x3000]
-    mov eax, PAGE_PRESENT | PAGE_PRESENT
+    mov eax, PAGE_PRESENT | PAGE_WRITE
 .build_page_entry:
     mov [es:di], eax
     add eax, 0x1000
@@ -55,7 +55,7 @@ boot:
 
     ; Page Table Entry
     lea di, [di + 0x4000]
-    mov eax, 0x100000 | PAGE_PRESENT | PAGE_PRESENT
+    mov eax, 0x100000 | PAGE_PRESENT | PAGE_WRITE
 .build_kernel_page_entry:
     mov [es:di], eax
     add eax, 0x1000
