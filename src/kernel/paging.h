@@ -13,4 +13,6 @@ void init_paging();
 void map_page(void * physical_page, void * virtual_page);
 void unmap_page(void * virtual_page);
 
+void * map_one_page();
+
 #endif

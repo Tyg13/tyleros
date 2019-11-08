@@ -1,7 +1,9 @@
 #include "paging.h"
 
 #include "memory.h"
+#include "pma.h"
 #include "util.h"
+#include "vma.h"
 
 #include <string.h>
 
@@ -96,4 +98,11 @@ void unmap_page(void * virtual_page) {
    page_entry ^= PAGE_PRESENT;
 
    asm volatile("invlpg (%0)" :: "b"(virtual_page_address) : "memory");
+}
+
+void * map_one_page() {
+   const auto physical_address = reinterpret_cast<void *>(get_physical_page());
+   const auto virtual_address  = reinterpret_cast<void *>(get_virtual_pages(PAGE_SIZE));
+   map_page(physical_address, virtual_address);
+   return virtual_address;
 }

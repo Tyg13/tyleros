@@ -16,12 +16,15 @@ size_t free_list_size;
 size_t max_free_list_size;
 constexpr auto NODES_PER_PAGE = PAGE_SIZE / sizeof(free_node);
 
+bool virtual_memory_allocator_available = false;
+
 static void add_node_to_free_list(void * base, size_t size) {
-   auto node = virtual_free_list;
-   auto last = node;
+   free_node * node       = nullptr;
+   free_node * last       = nullptr;
+   free_node * empty_node = nullptr;
 
    // Walk free list, looking for nodes to merge with if possible
-   while (node) {
+   for (node = virtual_free_list, last = node; node != nullptr; last = node, node = node->next) {
       const auto end_of_current_node = reinterpret_cast<uintptr_t>(node->base) + node->size;
       const auto end_of_new_node     = reinterpret_cast<uintptr_t>(base) + size;
       // If the area to be freed is just before an existing free node,
@@ -38,19 +41,25 @@ static void add_node_to_free_list(void * base, size_t size) {
          node->size += size;
          return;
       }
-      last = node;
-      node = node->next;
+      // Keep track of empty nodes in case we can't merge
+      if (empty_node == nullptr && node->size == 0) {
+         empty_node = node;
+      }
    }
 
-   // Otherwise, no adjacent nodes exist.
-   // Create a new node after the last to store the free area.
-   auto new_node = last + 1;
-   *new_node = free_node { base, size, nullptr };
-
-   last->next = new_node;
+   // Otherwise, there are no nodes to merge with.
+   // Use an existing empty node, or if one doesn't exist,
+   // create a new node after the last to store the free area.
+   if (empty_node == nullptr) {
+      empty_node = last + 1;
+      last->next = empty_node;
+   }
+   *empty_node = free_node { base, size, nullptr };
 
    // TODO: grow the free list when it hits max_free_list_size
    ++free_list_size;
+
+   assert(free_list_size != max_free_list_size, "No more free nodes!");
 }
 
 void init_virtual_memory_allocator() {
@@ -65,10 +74,6 @@ void init_virtual_memory_allocator() {
    virtual_free_list->size = 0;
    virtual_free_list->next = nullptr;
 
-   // TODO: should walk the page tables to determine which virtual addresses
-   // are free, since we identity map pages for the physical frame allocator and
-   // the virtual memory allocator
-
    // 0x0 - 0x200000 is identity mapped
    // 0xC000000 - 0xC200000 is the kernel
    //
@@ -76,36 +81,44 @@ void init_virtual_memory_allocator() {
    // and 0xC200000 - UINTPTR_MAX is free
    add_node_to_free_list(reinterpret_cast<void *>( 0x200000),   0xC000000 -  0x200000);
    add_node_to_free_list(reinterpret_cast<void *>(0xC200000), UINTPTR_MAX - 0xC200000);
+
+   const auto remove_from_free_list = [](const auto base, auto size) {
+      // Round size up to nearest multiple of PAGE_SIZE
+      size = ((size + PAGE_SIZE - 1) / PAGE_SIZE) * PAGE_SIZE;
+      for (free_node * node = virtual_free_list; node != nullptr; node = node->next) {
+         const auto end_of_node = reinterpret_cast<char *>(node->base) + node->size;
+         const auto end_of_area = reinterpret_cast<char *>(base) + size;
+         if (base >= node->base && end_of_area <= end_of_node) {
+            // Split node
+            const auto remaining_front_size = reinterpret_cast<uintptr_t>(base)
+                                            - reinterpret_cast<uintptr_t>(node->base);
+            const auto remaining_end_size   = end_of_node - end_of_area;
+            node->size = remaining_front_size;
+            add_node_to_free_list(end_of_area, remaining_end_size);
+            return;
+         }
+      }
+   };
+   // Remove the identity pages used by the page stack and the
+   // virtual free list from the free list
+   remove_from_free_list(get_base_of_page_stack(), get_size_of_page_stack());
+   remove_from_free_list(virtual_free_list, PAGE_SIZE);
+
+   virtual_memory_allocator_available = true;
 }
 
-void * get_virtual_pages(size_t n) {
-   assert(n != 0, "Tried to allocate page of size 0!");
-   // Keep track of the previous node in case we need to remove a node from the free list.
-   free_node * prev = nullptr;
+void * get_virtual_pages(size_t size) {
+   assert(size != 0, "Tried to allocate page of size 0!");
 
    // Walk the free list for a node of appropriate size.
-   for (free_node * node = virtual_free_list; node != nullptr; prev = node, node = node->next) {
+   for (free_node * node = virtual_free_list; node != nullptr; node = node->next) {
       // Found a node big enough
-      if (node->size >= n) {
-         const auto free_page_address = node->base;
-         // If the node isn't the exact size of the request, split it
-         const auto remaining_size_in_node = node->size - n;
-         if (remaining_size_in_node != 0) {
-            const auto end_of_requested_area = reinterpret_cast<uintptr_t>(node->base) + n;
-            node->base = reinterpret_cast<void *>(end_of_requested_area);
-            node->size = remaining_size_in_node;
-         }
-         // Otherwise, remove the node entirely from the list
-         else {
-            if (prev) {
-               prev->next = node->next;
-            }
-            // If no prev pointer, node is the root node.
-            // Make the next node the root node
-            else {
-               virtual_free_list = node->next;
-            }
-         }
+      if (node->size >= size) {
+         // Adjust the remaining size in the node
+         const auto free_page_address      = node->base;
+         const auto end_of_requested_area  = reinterpret_cast<uintptr_t>(node->base) + size;
+         node->base  = reinterpret_cast<void *>(end_of_requested_area);
+         node->size -= size;
          return free_page_address;
       }
    }
