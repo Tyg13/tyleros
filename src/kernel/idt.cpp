@@ -1,10 +1,8 @@
 #include "idt.h"
 
-#include "cmos.h"
 #include "interrupts.h"
 #include "memory.h"
 #include "pic.h"
-#include "pit.h"
 
 IDTR g_idtr;
 
@@ -17,8 +15,6 @@ static void load_idt();
 void init_interrupts() {
    remap_pic();
    load_idt();
-   init_pit();
-   init_real_time_clock();
    unmask_irq(1);
    asm volatile ("sti" ::: "memory", "cc");
 }

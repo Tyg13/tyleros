@@ -3,6 +3,7 @@
 #include "cmos.h"
 #include "pic.h"
 #include "scheduler.h"
+#include "timing.h"
 #include "util.h"
 #include "vga.h"
 
@@ -11,15 +12,15 @@
 #define INTERRUPT __attribute__((interrupt))
 
 INTERRUPT void page_fault_handler(interrupt_frame* frame, size_t error_code);
-INTERRUPT void timer_handler(interrupt_frame* frame);
 INTERRUPT void keyboard_handler(interrupt_frame * frame);
 INTERRUPT void pic1_irq_handler(interrupt_frame* frame);
-extern "C" task_frame* frame_handler(task_frame* tcb);
-
-extern "C" void scheduler_interrupt();
 INTERRUPT void pic2_irq_handler(interrupt_frame* frame);
+INTERRUPT void timer_handler(interrupt_frame* frame);
 INTERRUPT void interrupt_handler(interrupt_frame* frame);
 INTERRUPT void exception_handler(interrupt_frame* frame, size_t error_code);
+
+extern "C" task_frame* frame_handler(task_frame* tcb);
+extern "C" void scheduler_interrupt();
 
 #undef INTERRUPT
 
@@ -66,6 +67,11 @@ void page_fault_handler(interrupt_frame* frame, size_t error_code) {
    }
 }
 
+void timer_handler(interrupt_frame* frame) {
+   tick();
+   io::out(PIC1_COMMAND, END_OF_INTERRUPT);
+}
+
 static constexpr char scancode_to_key[0x40] = {
    '\0', ' ', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', '\b',
    '\t', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\n', 0x0,
@@ -85,11 +91,6 @@ void keyboard_handler(interrupt_frame* frame) {
    io::out(PIC1_COMMAND, END_OF_INTERRUPT);
 }
 
-unsigned int ticks_elapsed = 0;
-void timer_handler(interrupt_frame* frame) {
-   ++ticks_elapsed;
-   io::out(PIC1_COMMAND, END_OF_INTERRUPT);
-}
 
 void pic1_irq_handler(interrupt_frame* frame) {
    io::out(PIC1_COMMAND, END_OF_INTERRUPT);

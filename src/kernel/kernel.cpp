@@ -1,16 +1,15 @@
 #include "kernel.h"
 
+#include "cmos.h"
 #include "gdt.h"
 #include "idt.h"
 #include "memory.h"
 #include "scheduler.h"
 #include "sse.h"
-#include "util.h"
+#include "timing.h"
 #include "vga.h"
 
 #include <stdio.h>
-
-
 
 void kmain(void)
 {
@@ -20,6 +19,9 @@ void kmain(void)
    init_memory();
    init_scheduler();
    init_interrupts();
-loop:
-   goto loop;
+   init_timer();
+   enable_task_switch();
+   while(true) {   
+      asm volatile ("pause");
+   }
 }

@@ -41,7 +41,7 @@ struct task_context {
    task_state state;
 };
 
-void schedule_task(task * new_task);
+void schedule_task(task * new_task, void * context);
 
 task_frame * task_switch(task_frame * tcb);
 
@@ -51,5 +51,11 @@ void yield();
 [[noreturn]] void exit();
 
 extern uint8_t should_task_switch;
+
+inline void enable_task_switch() {
+   asm volatile ("cli" ::: "memory");
+   should_task_switch = 1;
+   asm volatile ("sti" ::: "memory");
+}
 
 #endif

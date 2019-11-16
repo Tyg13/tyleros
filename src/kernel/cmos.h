@@ -16,4 +16,8 @@ constexpr static uint8_t RTC_SELECT_C = 0x0C;
 
 constexpr static uint8_t RTC_ENABLE_INTERRUPT = 1 << 6;
 
+uint64_t get_ticks_since_boot();
+
+void sleep(uint64_t ticks);
+
 #endif

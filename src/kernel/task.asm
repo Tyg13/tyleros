@@ -2,9 +2,11 @@
 extern frame_handler
 
 extern should_task_switch
+extern ticks_since_boot
 
 global scheduler_interrupt
 scheduler_interrupt:
+    inc qword [ticks_since_boot]
     cmp byte [should_task_switch], 1
     je task_switch
 end_of_interrupt:

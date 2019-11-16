@@ -25,6 +25,7 @@ add_executable(kernel.debug.elf
     pit.cpp
     pma.cpp
     scheduler.cpp
+    timing.cpp
     vga.cpp
     vma.cpp
     util/new.cpp)
