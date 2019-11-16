@@ -7,7 +7,7 @@ add_library(asm.o  OBJECT
    start.asm
    sse.asm
    task.asm)
-target_compile_options (asm.o PRIVATE "-g")
+target_compile_options (asm.o PRIVATE -g -F dwarf)
 
 add_executable(kernel.debug.elf
     $<TARGET_OBJECTS:asm.o>
