@@ -1,7 +1,7 @@
 execute_process(COMMAND ${CMAKE_CXX_COMPILER} ${CMAKE_CXX_FLAGS} -print-file-name=crtbegin.o OUTPUT_VARIABLE CRTBEGIN_OBJ OUTPUT_STRIP_TRAILING_WHITESPACE)
 execute_process(COMMAND ${CMAKE_CXX_COMPILER} ${CMAKE_CXX_FLAGS} -print-file-name=crtend.o   OUTPUT_VARIABLE CRTEND_OBJ   OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-add_library(asm.o  OBJECT
+add_library(asm.o OBJECT
    crti.asm
    crtn.asm
    start.asm
@@ -35,12 +35,12 @@ add_executable(kernel.debug.elf
 
 set_source_files_properties(interrupts.cpp PROPERTIES COMPILE_OPTIONS -mgeneral-regs-only)
 
+get_target_property(LIBK_SOURCE_DIR k SOURCE_DIR)
 set(LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/kernel.ld")
-target_link_options       (kernel.debug.elf PRIVATE -T${LINKER_SCRIPT} -n -L$<TARGET_FILE_DIR:libk>)
+target_link_options       (kernel.debug.elf PRIVATE -T${LINKER_SCRIPT} -n -L$<TARGET_FILE_DIR:k>)
 set_target_properties     (kernel.debug.elf PROPERTIES LINK_DEPENDS ${LINKER_SCRIPT})
-target_link_libraries     (kernel.debug.elf PRIVATE -nostdlib -lgcc libk)
+target_link_libraries     (kernel.debug.elf PRIVATE -nostdlib -lgcc -lk)
 target_compile_options    (kernel.debug.elf PRIVATE ${COMMON_COMPILE_OPTIONS})
-get_target_property(LIBK_SOURCE_DIR libk SOURCE_DIR)
 target_include_directories(kernel.debug.elf PRIVATE SYSTEM ${LIBK_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} util)
 
 add_custom_target(kernel.elf ALL

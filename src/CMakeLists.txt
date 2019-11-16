@@ -20,3 +20,11 @@ add_custom_target(boot.img ALL
     COMMAND mcopy   -i boot.img kernel.elf ::/kernel
     DEPENDS boot.bin boot2.bin kernel.elf
     WORKING_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+
+get_target_property(LIBK_SOURCE_DIR k SOURCE_DIR)
+add_custom_target(sysroot ALL
+    COMMAND mkdir -p ${CMAKE_SOURCE_DIR}/sysroot/usr/include ${CMAKE_SOURCE_DIR}/sysroot/usr/lib
+    COMMAND find ${LIBK_SOURCE_DIR} -type f -name '*.h' -exec cp '{}' ${CMAKE_SOURCE_DIR}/sysroot/usr/include/ '\;'
+    COMMAND find $<TARGET_FILE_DIR:k> -type f -name '*.a' -exec cp '{}' ${CMAKE_SOURCE_DIR}/sysroot/usr/lib/ '\;'
+    DEPENDS k
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

@@ -1,4 +1,4 @@
-add_library(libk STATIC
+add_library(k STATIC
     errno.cpp
     stdio.cpp
     stdlib.cpp
@@ -6,5 +6,5 @@ add_library(libk STATIC
     time.cpp
     unistd.cpp)
 
-target_include_directories(libk PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
-target_compile_options    (libk PRIVATE ${COMMON_COMPILE_OPTIONS})
+target_include_directories(k PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options    (k PRIVATE ${COMMON_COMPILE_OPTIONS})
