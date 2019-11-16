@@ -7,22 +7,28 @@ namespace kstd {
    template <typename T, typename Allocator = kstd::allocator<T>>
    class list {
       struct node {
-         T    data;
+         T      data;
          node * next = nullptr;
       };
       struct iterator {
-         iterator(node * _inner) : inner(_inner) {}
+         explicit iterator(const node * const & _inner) : inner(_inner) {}
 
-         iterator& operator++()       { inner = inner->next; return *this; }
-         T &       operator* () const { return inner->data; }
+         iterator & operator++()       { inner = inner->next; return *this; }
+         T        & operator* () const { return inner->data; }
 
          friend bool operator!=(const iterator& lhs, const iterator& rhs) { return lhs.inner != rhs.inner; }
-         // Comparison with end iterator is always false
-         friend bool operator!=(T *, const iterator&) { return false; }
-         friend bool operator!=(const iterator&, T *) { return false; }
+
+         // Comparison with end iterator is always false,
+         // unless we have two end iterators
+         struct end {
+            friend bool operator!=(const end&, const end&)      { return true;  }
+            friend bool operator!=(const end&, const iterator&) { return false; }
+            friend bool operator!=(const iterator&, const end&) { return false; }
+         };
       private:
-         node * inner = nullptr;
+         const node * const & inner = nullptr;
       };
+      using end_iterator   = typename iterator::end;
    public:
       using iterator       = struct iterator;
       using const_iterator = const iterator *;
@@ -57,8 +63,8 @@ namespace kstd {
       iterator       begin()       { return iterator      (head); }
       const_iterator begin() const { return const_iterator(head); }
 
-      T * end()       { return nullptr; }
-      T * end() const { return nullptr; }
+      end_iterator end()       { return end_iterator{}; }
+      end_iterator end() const { return end_iterator{}; }
 
       allocator_type get_allocator() const { return allocator_type(); }
 

@@ -36,15 +36,8 @@ uintptr_t get_interrupt_handler(unsigned int vector_index) {
    }
 }
 
-void page_fault_handler(interrupt_frame* frame, size_t error_code) {
-   void * fault_address;
-   asm volatile ("mov %%cr2, %0" : "=g"(fault_address));
-   const auto access_was_read = (error_code ^ (1 << 2)) != 0;
-   const auto action = access_was_read ? "reading" : "writing to";
+static void print_interrupt_frame(interrupt_frame* frame) {
    char message[512];
-   sprintf(message, "Page fault occurred %s 0x%p\n", action, fault_address);
-   vga::string(message).write();
-
    sprintf(message,
          "RIP:     0x%lx\n"
          "CS:      0x%lx\n"
@@ -54,6 +47,18 @@ void page_fault_handler(interrupt_frame* frame, size_t error_code) {
          "TASK ID: %u\n",
          frame->rip, frame->cs, frame->rflags, frame->rsp, frame->ss, get_current_task());
    vga::string(message).write();
+}
+
+void page_fault_handler(interrupt_frame* frame, size_t error_code) {
+   void * fault_address;
+   asm volatile ("mov %%cr2, %0" : "=g"(fault_address));
+   const auto access_was_read = (error_code ^ (1 << 2)) != 0;
+   const auto action = access_was_read ? "reading" : "writing to";
+   char message[64];
+   sprintf(message, "Page fault occurred %s 0x%p\n", action, fault_address);
+   vga::string(message).write();
+
+   print_interrupt_frame(frame);
 
    const auto page_not_present = (error_code ^ 1) != 0;
    if (page_not_present) {

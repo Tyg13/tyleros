@@ -31,9 +31,8 @@ boot:
     mov bl, byte [NUM_OF_FAT_TABLES]
     mov ax, word [SECTORS_PER_FAT]
     mul bl
-    add ax, cx
-    mov cx, word [NUM_RESERVED_SECTORS]
-    add ax, cx
+    add ax, si
+    add ax, word [NUM_RESERVED_SECTORS]
 
     ; Save first data sector
     mov byte [first_data_sector], al

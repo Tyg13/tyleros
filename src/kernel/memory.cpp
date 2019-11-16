@@ -71,8 +71,7 @@ struct allocation {
 allocation * allocation_list;
 
 void init_kmalloc() {
-   allocation_list = reinterpret_cast<allocation *>(get_physical_page());
-   map_page(allocation_list, allocation_list);
+   allocation_list = reinterpret_cast<allocation *>(map_one_page());
 
    allocation_list->size                    = 0;
    allocation_list->physical_page_list_size = 0;
