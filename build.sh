@@ -1,6 +1,13 @@
 #!/bin/bash
 
 set -e
+if [[ "$DEBUG" == "1" ]]; then
+    set -x
+fi
+
+if [[ "$1" == "clean" ]]; then
+    rm -rf build/* bin/* sysroot/*
+fi
 
 cd build
 
