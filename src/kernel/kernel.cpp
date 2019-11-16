@@ -1,6 +1,9 @@
 #include "kernel.h"
 
 #include "cmos.h"
+#include "dma.h"
+#include "filesystem.h"
+#include "floppy.h"
 #include "gdt.h"
 #include "idt.h"
 #include "memory.h"
@@ -20,6 +23,9 @@ void kmain(void)
    init_scheduler();
    init_interrupts();
    init_timer();
+   init_floppy_driver();
+   init_dma();
+   init_filesystem();
    enable_task_switch();
    while(true) {   
       asm volatile ("pause");

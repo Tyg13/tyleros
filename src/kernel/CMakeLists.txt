@@ -15,7 +15,10 @@ add_executable(kernel.debug.elf
     ${CRTBEGIN_OBJ}
 
     cmos.cpp
+    dma.cpp
     gdt.cpp
+    filesystem.cpp
+    floppy.cpp
     idt.cpp
     interrupts.cpp
     kernel.cpp
