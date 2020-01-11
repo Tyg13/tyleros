@@ -5,7 +5,7 @@
 #include <stddef.h>
 
 struct memory_map_entry {
-    enum class type : uint32_t {
+    enum type : uint32_t {
         usable      = 1,
         reserved    = 2,
         reclaimable = 3,
@@ -21,9 +21,8 @@ __attribute((packed));
 
 using memory_map = memory_map_entry[];
 
-extern memory_map& g_memory_map;
-
-memory_map& get_memory_map();
+inline auto   g_num_of_memory_map_entries = * reinterpret_cast<uint32_t   *>(0x1000);
+inline auto & g_memory_map                = * reinterpret_cast<memory_map *>(0x1008);
 
 // 4KiB pages
 constexpr static int PAGE_SIZE = 0x1000;

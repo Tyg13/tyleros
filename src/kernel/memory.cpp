@@ -20,18 +20,15 @@ void init_memory() {
    init_kmalloc();
 }
 
-memory_map & g_memory_map                = * reinterpret_cast<memory_map *>(0x1008);
-const auto & g_num_of_memory_map_entries = * reinterpret_cast<uint32_t   *>(0x1000);
-
 memory_map& get_memory_map() { return g_memory_map; }
 
 void sort_memory_map() {
    // Sort the physical memory map returned by the bootloader, putting the largest usable regions
    // first in our list
    kstd::insertion_sort(g_memory_map, g_num_of_memory_map_entries,
-      +[](const memory_map_entry & lhs, const memory_map_entry & rhs) {
-         const auto entry_is_usable =
-            [](const auto & entry) { return entry.type == memory_map_entry::type::usable; };
+      [](const memory_map_entry & lhs, const memory_map_entry & rhs) {
+         constexpr auto entry_is_usable =
+            [](const auto & entry) { return entry.type == memory_map_entry::usable; };
          if (!entry_is_usable(lhs)) {
             // If the lhs is unusable, the rhs is better.
             return false;
@@ -42,17 +39,19 @@ void sort_memory_map() {
          }
          // If both are usable regions, the larger one is better.
          return lhs.length > rhs.length;
-   });
+      }
+   );
    const auto mark_unusable = [](uintptr_t start, uintptr_t end) {
-      const auto adjust_entry  = [=](memory_map_entry & entry) {
-         if (start <= entry.base && entry.base < end) {
-            entry.length -= end - entry.base;
-            entry.base = end;
-            return true;
+      kstd::transform(g_memory_map, g_num_of_memory_map_entries,
+         [=](memory_map_entry & entry) {
+            if (start <= entry.base && entry.base < end) {
+               entry.length -= end - entry.base;
+               entry.base = end;
+               return true;
+            }
+            return false;
          }
-         return false;
-      };
-      kstd::transform(g_memory_map, g_num_of_memory_map_entries, adjust_entry);
+      );
    };
    // We can't actually use 0x0 - 0x500 because this memory is owned by the BIOS.
    mark_unusable(0x0, 0x500);
