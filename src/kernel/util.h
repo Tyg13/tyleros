@@ -23,8 +23,8 @@ namespace kstd {
       }
    }
 
-   template <typename Element>
-   void insertion_sort(Element array[], int num_of_elements, bool (*cmp)(const Element&, const Element&)) {
+   template <typename Element, typename Compare>
+   void insertion_sort(Element array[], int num_of_elements, Compare cmp) {
       for (auto i = 0; i < num_of_elements; ++i) {
          for (auto j = i; j < num_of_elements; ++j) {
             if (cmp(array[j], array[i])) {
