@@ -86,4 +86,7 @@ inline void panic(const char * msg, ...) {
    __builtin_unreachable();
 }
 
+inline constexpr auto max = [](const auto & a, const auto & b) { return a > b ? a : b; };
+inline constexpr auto min = [](const auto & a, const auto & b) { return a < b ? a : b; };
+
 #endif
