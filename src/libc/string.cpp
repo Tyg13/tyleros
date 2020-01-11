@@ -67,7 +67,7 @@ int strcmp(const char * str1, const char * str2) {
 
 char * strncpy(char * dst, const char * src, size_t n) {
    for (size_t i = 0; i < n; ++i) {
-      *dst = *src;
+      dst[i] = src[i];
       if (src[i] == '\0') {
          break;
       }
