@@ -4,9 +4,8 @@
 extern volatile bool disk_interrupt_handled;
 
 void init_floppy_driver();
+void prepare_floppy_dma(void * buffer);
 
-void read_floppy_sector(int lba);
-
-extern const void * floppy_dma_buffer;
+void read_floppy(void * buffer, int start_sector, int sector_count);
 
 #endif

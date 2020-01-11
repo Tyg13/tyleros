@@ -16,22 +16,31 @@ constexpr auto AUTOINCREMENT           = 1 << 4;
 constexpr auto MODE_READ               = 2 << 2;
 constexpr auto MODE_WRITE              = 1 << 2;
 
-static void init_floppy_dma();
-
-void init_dma() {
-   init_floppy_dma();
+void * const floppy_dma_buffer = reinterpret_cast<void *>(0x10000);
+void * dma_buffer_for_channel(int channel) {
+   switch (channel) {
+      case 2:
+         return floppy_dma_buffer;
+      default:
+         return nullptr;
+   }
 }
 
-void init_floppy_dma() {
-   io::out(SINGLE_CHANNEL_MASK, MASK_ON | 2);
+void prepare_dma_transfer(int channel, void * buffer, uint16_t transfer_size, dma_mode mode) {
+   void * const dma_buffer = dma_buffer_for_channel(channel);
+   if (!dma_buffer) return;
+
+   // if a device is reading, the DMA controller is writing, and vice versa
+   const auto action = (mode == dma_mode::read) ? MODE_WRITE : MODE_READ;
+   const auto transfer_count = transfer_size - 1;
+   io::out(SINGLE_CHANNEL_MASK, MASK_ON | channel);
    io::out(FLIP_FLOP_RESET, 0xFF);
-   io::out(START_ADDRESS_CHANNEL_2, (reinterpret_cast<uintptr_t>(floppy_dma_buffer)      ) & 0xFF);
-   io::out(START_ADDRESS_CHANNEL_2, (reinterpret_cast<uintptr_t>(floppy_dma_buffer) >>  8) & 0xFF);
+   io::out(START_ADDRESS_CHANNEL_2, (reinterpret_cast<uintptr_t>(dma_buffer)      ) & 0xFF);
+   io::out(START_ADDRESS_CHANNEL_2, (reinterpret_cast<uintptr_t>(dma_buffer) >>  8) & 0xFF);
    io::out(FLIP_FLOP_RESET, 0xFF);
-   const auto transfer_count = 0x100 - 1;
    io::out(COUNT_CHANNEL_2, (transfer_count     ) & 0xFF);
    io::out(COUNT_CHANNEL_2, (transfer_count >> 4) & 0xFF);
-   io::out(PAGE_ADDRESS_CHANNEL_2,  (reinterpret_cast<uintptr_t>(floppy_dma_buffer) >> 16) & 0xFF);
-   io::out(MODE_REGISTER, SINGLE_TRANSFER | AUTOINCREMENT | MODE_WRITE | 2);
-   io::out(SINGLE_CHANNEL_MASK, 2);
+   io::out(PAGE_ADDRESS_CHANNEL_2,  (reinterpret_cast<uintptr_t>(dma_buffer) >> 16) & 0xFF);
+   io::out(MODE_REGISTER, SINGLE_TRANSFER | AUTOINCREMENT | action | channel);
+   io::out(SINGLE_CHANNEL_MASK, channel);
 }

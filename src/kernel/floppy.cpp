@@ -1,9 +1,12 @@
 #include "floppy.h"
 
 #include "cmos.h"
+#include "dma.h"
 #include "pic.h"
 #include "util.h"
 #include "util/io.h"
+
+#include <string.h>
 
 constexpr static auto MT  = 1 << 7;
 constexpr static auto MFM = 1 << 6;
@@ -35,16 +38,19 @@ static void wait_for_disk_interrupt() {
    disk_interrupt_handled = false;
 }
 
-[[noreturn]] static void fail(const char * message) {
+[[noreturn]]
+static void fail(const char * message) {
    panic("Error initializing floppy: %s", message);
 }
-const auto fail_if = [](const bool val, const char * message = "") {
+
+static void fail_if(bool val, const char * message = "") {
    if (val) {
       fail(message);
    }
-};
+}
 
-const auto issue_parameter_command = [](const auto param) {
+template <typename Command>
+const bool issue_parameter_command(Command param) {
    auto status = io::in(MAIN_STATUS_REGISTER);
    while (((status = io::in(MAIN_STATUS_REGISTER)) & STATUS_RQM) == 0) {
       asm volatile("pause");
@@ -56,13 +62,13 @@ const auto issue_parameter_command = [](const auto param) {
    return false;
 };
 
-template <int N = 1, typename ... Args>
+template <unsigned N = 1, typename ... Args>
 auto issue_command_with_result(uint16_t command, uint8_t (*result)[N], Args&& ... args) {
    auto retries = 5;
    while (retries-- > 0) {
-      // Check RQM = 1 and DIO = 0
       auto status = io::in(MAIN_STATUS_REGISTER);
-      if (status & STATUS_RQM && (status & STATUS_DIO) == 0) {
+      if ((status & STATUS_RQM) != 0 &&
+          (status & STATUS_DIO) == 0) {
          io::out(DATA_FIFO, command);
          const bool commands_succeeded = (issue_parameter_command(args) && ...);
          if (!commands_succeeded) {
@@ -77,19 +83,19 @@ auto issue_command_with_result(uint16_t command, uint8_t (*result)[N], Args&& ..
             while (((status = io::in(MAIN_STATUS_REGISTER)) & STATUS_RQM) == 0) {
                asm volatile("pause");
             }
-            int result_index = 0;
+            unsigned result_index = 0;
             while ((status = io::in(MAIN_STATUS_REGISTER) & STATUS_DIO)) {
                fail_if(result_index >= N, "Result buffer not large enough!");
-               (*result)[result_index] = io::in(DATA_FIFO) << result_index;
+               (*result)[result_index] = io::in(DATA_FIFO);
                ++result_index;
             }
          }
          while (((status = io::in(MAIN_STATUS_REGISTER)) & STATUS_RQM) == 0) {
             asm volatile("pause");
          }
-         if (status & STATUS_RQM 
-               && (status & STATUS_DIO) == 0
-               && (status & STATUS_CMD_BSY) == 0) {
+         if ((status & STATUS_RQM    ) != 0 &&
+             (status & STATUS_DIO    ) == 0 &&
+             (status & STATUS_CMD_BSY) == 0) {
             // Command succeeded, we can stop retrying
             return;
          }
@@ -159,7 +165,7 @@ struct CHS {
    int sector;
 };
 
-static auto sector_to_chs(int sector) {
+static auto lba_to_chs(int sector) {
    return CHS {
       .cylinder = sector / SECTORS_PER_CYLINDER,
       .head     = (sector % SECTORS_PER_CYLINDER) / SECTORS_PER_HEAD,
@@ -167,12 +173,15 @@ static auto sector_to_chs(int sector) {
    };
 }
 
-const void * floppy_dma_buffer = reinterpret_cast<void *>(0x2000);
+constexpr static auto BYTES_PER_SECTOR = 0x100;
 
-void read_floppy_sector(int lba) {
-   const auto [cylinder, head, sector] = sector_to_chs(lba);
+void read_floppy(void * buffer, int lba, int sector_count) {
+   const auto transfer_size = BYTES_PER_SECTOR * sector_count;
+   prepare_dma_transfer(FLOPPY_DMA_CHANNEL, buffer, transfer_size, dma_mode::read);
+   const auto [cylinder, head, sector] = lba_to_chs(lba);
    const auto end_of_track = (lba / SECTORS_PER_HEAD + 1) * SECTORS_PER_HEAD;
-   uint8_t result[8];
+
+   uint8_t result[7];
    issue_command_with_result(COMMAND_READ | MFM | MT, &result,
       head << 2,
       cylinder,
@@ -183,5 +192,6 @@ void read_floppy_sector(int lba) {
       0x1b,
       0xff
    );
-      
+
+   memcpy(buffer, dma_buffer_for_channel(FLOPPY_DMA_CHANNEL), transfer_size);
 }
