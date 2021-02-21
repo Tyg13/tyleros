@@ -104,7 +104,7 @@ auto issue_command_with_result(uint16_t command, uint8_t (*result)[N], Args&& ..
    fail("issuing floppy command");
 }
 const auto issue_command = [](const auto command, const auto ... args) {
-   return issue_command_with_result<1>(command, nullptr, args...);
+   return issue_command_with_result<sizeof...(args)>(command, nullptr, args...);
 };
 
 void init_floppy_driver() {
@@ -178,6 +178,7 @@ constexpr static auto BYTES_PER_SECTOR = 0x100;
 void read_floppy(void * buffer, int lba, int sector_count) {
    const auto transfer_size = BYTES_PER_SECTOR * sector_count;
    prepare_dma_transfer(FLOPPY_DMA_CHANNEL, buffer, transfer_size, dma_mode::read);
+
    const auto [cylinder, head, sector] = lba_to_chs(lba);
    const auto end_of_track = (lba / SECTORS_PER_HEAD + 1) * SECTORS_PER_HEAD;
 

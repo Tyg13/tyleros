@@ -1,4 +1,4 @@
-#include "kernel.h"
+#include "main.h"
 
 #include "cmos.h"
 #include "dma.h"
@@ -8,23 +8,23 @@
 #include "idt.h"
 #include "memory.h"
 #include "scheduler.h"
+#include "serial.h"
 #include "sse.h"
 #include "timing.h"
+#include "util.h"
 #include "vga.h"
 
-#include <stdio.h>
-
-void kmain(void)
+void kmain()
 {
    vga::clear_screen();
    enable_sse();
+   IDT::init();
+   serial::init();
    init_gdt();
    init_memory();
    init_scheduler();
-   init_interrupts();
    init_timer();
    init_floppy_driver();
-   init_dma();
    init_filesystem();
    enable_task_switch();
    while(true) {   

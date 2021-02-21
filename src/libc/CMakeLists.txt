@@ -7,4 +7,3 @@ add_library(k STATIC
     unistd.cpp)
 
 target_include_directories(k PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
-target_compile_options    (k PRIVATE ${COMMON_COMPILE_OPTIONS})

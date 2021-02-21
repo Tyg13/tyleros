@@ -17,22 +17,22 @@ INTERRUPT void keyboard_handler(interrupt_frame * frame);
 INTERRUPT void timer_handler(interrupt_frame* frame);
 INTERRUPT void floppy_handler(interrupt_frame* frame);
 INTERRUPT void interrupt_handler(interrupt_frame* frame);
-INTERRUPT void exception_handler(interrupt_frame* frame, size_t error_code);
 
 extern "C" task_frame* frame_handler(task_frame* tcb);
 extern "C" void scheduler_interrupt();
 
 #undef INTERRUPT
 
-uintptr_t get_interrupt_handler(unsigned int vector_index) {
-   constexpr auto cast = [](const auto & handler) { return reinterpret_cast<uintptr_t>(handler); };
-   switch (vector_index) {
-      case 0x0E:          return cast(page_fault_handler);
-      case 0x20:          return cast(timer_handler);
-      case 0x21:          return cast(keyboard_handler);
-      case 0x26:          return cast(floppy_handler);
-      case 0x28:          return cast(scheduler_interrupt);
-      default:            return cast(interrupt_handler);
+uintptr_t get_interrupt_handler(unsigned int index) {
+#define CAST(handler) reinterpret_cast<uintptr_t>(handler)
+   switch (index) {
+      case 0x0E: return CAST(page_fault_handler);
+      case 0x20: return CAST(timer_handler);
+      case 0x21: return CAST(keyboard_handler);
+      case 0x26: return CAST(floppy_handler);
+      case 0x28: return CAST(scheduler_interrupt);
+      default:   return CAST(interrupt_handler);
+#undef CAST
    }
 }
 
@@ -103,6 +103,3 @@ void interrupt_handler(interrupt_frame* frame) {
 task_frame* frame_handler(task_frame* tcb) {
    return task_switch(tcb);
 }
-
-void exception_handler(interrupt_frame* frame, size_t error_code) { }
-

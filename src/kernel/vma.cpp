@@ -65,7 +65,7 @@ static void add_node_to_free_list(void * base, size_t size) {
 void init_virtual_memory_allocator() {
    // Identity map a page for the virtual free list to reside in
    virtual_free_list = reinterpret_cast<decltype(virtual_free_list)>(get_physical_page());
-   map_page(virtual_free_list, virtual_free_list);
+   map_page((uintptr_t)virtual_free_list, (uintptr_t)virtual_free_list);
 
    max_free_list_size = NODES_PER_PAGE;
 

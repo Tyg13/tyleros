@@ -27,11 +27,11 @@ void * dma_buffer_for_channel(int channel) {
 }
 
 void prepare_dma_transfer(int channel, void * buffer, uint16_t transfer_size, dma_mode mode) {
-   void * const dma_buffer = dma_buffer_for_channel(channel);
+   const auto dma_buffer = dma_buffer_for_channel(channel);
    if (!dma_buffer) return;
 
    // if a device is reading, the DMA controller is writing, and vice versa
-   const auto action = (mode == dma_mode::read) ? MODE_WRITE : MODE_READ;
+   const auto read_or_write = (mode == dma_mode::read) ? MODE_WRITE : MODE_READ;
    const auto transfer_count = transfer_size - 1;
    io::out(SINGLE_CHANNEL_MASK, MASK_ON | channel);
    io::out(FLIP_FLOP_RESET, 0xFF);
@@ -41,6 +41,6 @@ void prepare_dma_transfer(int channel, void * buffer, uint16_t transfer_size, dm
    io::out(COUNT_CHANNEL_2, (transfer_count     ) & 0xFF);
    io::out(COUNT_CHANNEL_2, (transfer_count >> 4) & 0xFF);
    io::out(PAGE_ADDRESS_CHANNEL_2,  (reinterpret_cast<uintptr_t>(dma_buffer) >> 16) & 0xFF);
-   io::out(MODE_REGISTER, SINGLE_TRANSFER | AUTOINCREMENT | action | channel);
+   io::out(MODE_REGISTER, SINGLE_TRANSFER | AUTOINCREMENT | read_or_write | channel);
    io::out(SINGLE_CHANNEL_MASK, channel);
 }

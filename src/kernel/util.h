@@ -1,6 +1,7 @@
 #ifndef UTIL_H
 #define UTIL_H
 
+#include "debug.h"
 #include "memory.h"
 #include "util/type_traits.h"
 #include "vga.h"
@@ -63,6 +64,7 @@ inline void vassert(bool value, const char * msg, va_list args) {
          vsprintf(buffer, msg, args);
 
          vga::string(buffer).write();
+         debug::write_str(buffer);
       }
    asm volatile ("hlt");
 loop: goto loop;

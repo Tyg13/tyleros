@@ -130,13 +130,11 @@ void init_gdt() {
 
    gdtr = GDTR {
       .size = sizeof(gdt) - 1,
-      .base = reinterpret_cast<uintptr_t>(&gdt) - KERNEL_VMA_OFFSET,
+      .base = reinterpret_cast<uintptr_t>(&gdt),
    };
 
-   GDTR * gdtr_linear = reinterpret_cast<GDTR *>(reinterpret_cast<uintptr_t>(&gdtr) - KERNEL_VMA_OFFSET);
-
    asm volatile ("":::"memory");
-   asm volatile ("lgdt %0" :: "m"(*gdtr_linear));
+   asm volatile ("lgdt %0" :: "m"(gdtr));
    asm volatile ("mov $0x2B, %%ax\t\r" :: "N"(0x2B));
    asm volatile ("ltr %ax");
 }

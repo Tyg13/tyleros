@@ -32,8 +32,8 @@ void init_page_stack() {
    // Identity map pages needed for the page stack itself
    const auto size_of_page_stack = sizeof(uintptr_t) * pages_total;
    const auto pages_needed_for_page_stack = div_round_up(size_of_page_stack, PAGE_SIZE);
-   for (unsigned long long page = 0; page < pages_needed_for_page_stack; ++page) {
-      const auto address = reinterpret_cast<void *>(base_of_page_stack + page * PAGE_SIZE);
+   for (auto page = 0; page < (int)pages_needed_for_page_stack; ++page) {
+      const auto address = (uintptr_t)(base_of_page_stack + page * PAGE_SIZE);
       map_page(address, address);
    }
 

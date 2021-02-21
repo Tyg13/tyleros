@@ -1,8 +1,24 @@
+; Stage 1 of the bootloader
+; This stage copies itself to elsewhere in low memory, jumps there,
+; then reads, from the FAT12-formatted floppy image:
+;   - the stage 2 bootloader to 0x7c00
+;   - the kernel image to 0x10000
+; After loading both into memory, it puts the base address and size of the kernel into
+; ebx, ecx and then jumps to the stage 2 bootloader
 [BITS 16]
 
+; Reserved area for the FAT, which gets filled in later on in the build process.
 FAT:
 jmp short boot
-times 0x60 - ($$ - $) db 0
+BYTES_PER_SECTOR     equ FAT + 0x0B
+SECTORS_PER_CLUSTER  equ FAT + 0x0D
+NUM_RESERVED_SECTORS equ FAT + 0x0E
+NUM_OF_FAT_TABLES    equ FAT + 0x10
+ROOT_DIR_ENTRY_COUNT equ FAT + 0x11
+SECTORS_PER_FAT      equ FAT + 0x16
+SECTORS_PER_TRACK    equ FAT + 0x18
+NUMBER_OF_HEADS      equ FAT + 0x1A
+times 0x3E - ($$ - $) db 0
 boot:
     ; dl contains the drive number, set by the BIOS
     mov [drive_number], dl
@@ -22,7 +38,7 @@ boot:
     mov cx, word [ROOT_DIR_ENTRY_COUNT]
     shl cx, 5
     add cx, 0x200 - 1 ; 512 bytes per sector
-    shr cx, 9         ; same as dividing by 512
+    shr cx, 9         ; 512 = 2 ^ 9
 
     ; Save root_dir_sectors in si
     mov si, cx
@@ -88,7 +104,6 @@ boot:
     ; Restore cluster number
     pop cx
 
-.unused_entry:
     mov si, 1
     xor di, di
     ; Check if last cluster is odd
@@ -116,19 +131,23 @@ boot:
     call read_floppy_sector
 
     ; Read next cluster number
+    ; Since this is FAT12, we read 16 bits and shift (or mask) to obtain the 12 bits we want.
     pop dx
     add bx, dx
     mov cx, word [bx]
 
+    ; Check if cluster number was odd
     cmp di, 1
     jne .else
 .if:
+    ; If the cluster number was odd we want the top 12 bits.
     shr cx, 4
     jmp .done
 .else:
+    ; If it was even, we want the bottom 12 bits.
     and cx, 0x0FFF
 .done:
-    ; Check if there are more clusters
+    ; Check if there are more clusters (0xFF8 signals the end)
     cmp cx, 0xFF8
     jl .next_cluster
 
@@ -143,11 +162,11 @@ boot:
     jmp .read_fat_entry
 
 .no_more_entries:
-    mov ebp, 0x10000
+    mov ebx, 0x10000
 
     ; Jump to stage 2
-    mov bx, 0x7c00
-    jmp bx
+    mov ax, 0x7c00
+    jmp ax
 
 read_floppy_sector:
     push ebx
@@ -207,19 +226,9 @@ drive_number: db 0
 first_data_sector:     db 0
 first_root_dir_sector: db 0
 
-current_table_value: dw 0x0
-
 where_to_load_file: dd 0x7c00
 
 times 510 - ($ - $$) db 0 ; Boot sector is 512 bytes
 dw 0xAA55 ; Boot signature
-BYTES_PER_SECTOR     equ FAT + 0x0B
-SECTORS_PER_CLUSTER  equ FAT + 0x0D
-NUM_RESERVED_SECTORS equ FAT + 0x0E
-NUM_OF_FAT_TABLES    equ FAT + 0x10
-ROOT_DIR_ENTRY_COUNT equ FAT + 0x11
-SECTORS_PER_FAT      equ FAT + 0x16
-SECTORS_PER_TRACK    equ FAT + 0x18
-NUMBER_OF_HEADS      equ FAT + 0x1A
 
 CLUSTER_OFFSET       equ 0x1A

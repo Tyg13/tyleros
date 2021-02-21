@@ -1,12 +1,17 @@
+; Stage 2 bootloader
+; This stage sets up page tables, with the following mappings:
+;   Physical					 Virtual                  
+;   0000 0000 0000 0000 - 0000 0000 0010 0000 -> 0000 0000 0000 0000 - 0000 0000 0010 0000
+;   0000 0000 0010 0000 - 0000 0000 0030 0000 -> 0000 0000 C000 0000 - 0000 0000 C000 0000
 jmp boot
 %include "elf_loader.asm"
 
 [BITS 16]
 
 boot:
-    ; ebp contains the address of where the kernel was loaded.
+    ; ebx contains the base of where the kernel was loaded.
     ; Store it for later
-    mov [kernel_address], ebp
+    mov dword [kernel_address], ebx
 
     xor eax, eax
     mov es, ax
@@ -17,44 +22,53 @@ boot:
     cld
     rep stosd
     
-    ; Identity map
-    ; 0x0 - 0x200000
-    mov di, PAGE_TABLE
+    ; Identity pages
+    mov di, PAGE_TABLE   ; di = 0x8000
     ; Page Map Level 4
-    lea eax, [es:di + 0x1000]
+    lea eax, [es:di + 0x1000] ; 0x9000
     or eax, PAGE_PRESENT | PAGE_WRITE
     mov [es:di], eax
 
     ; Page Directory Pointer Table
-    lea eax, [es:di + 0x2000]
+    lea eax, [es:di + 0x2000] ; 0xA000
     or eax, PAGE_PRESENT | PAGE_WRITE
     mov [es:di + 0x1000], eax
 
     ; Page Directory Entry
-    lea eax, [es:di + 0x3000]
+    lea eax, [es:di + 0x3000] ; 0xB000
     or eax, PAGE_PRESENT | PAGE_WRITE
     mov [es:di + 0x2000], eax
 
     ; Page Table Entry
-    lea di, [di + 0x3000]
+    lea di, [di + 0x3000]     ; 0xB000
     mov eax, PAGE_PRESENT | PAGE_WRITE
 .build_page_entry:
     mov [es:di], eax
     add eax, 0x1000
     add di, 0x8
-    cmp eax, 0x200000
+    cmp eax, 0x100000
     jb .build_page_entry
 
     ;Map kernel pages
-    ;0xC000000 - 0xC200000 to 0x100000 - 0x300000
     mov di, PAGE_TABLE
-    ; Page Directory Entry
-    lea eax, [es:di + 0x4000]
+
+    ; Page Map Level 4
+    lea eax, [es:di + 0x4000] ; 0xD000
     or eax, PAGE_PRESENT | PAGE_WRITE
-    mov [es:di + 0x2000 + 8 * 0x60], eax
+    mov [es:di + 8 * 0x1FF], eax
+
+    ; Page Directory Pointer Entry
+    lea eax, [es:di + 0x5000] ; 0xD000
+    or eax, PAGE_PRESENT | PAGE_WRITE
+    mov [es:di + 0x4000 + 8 * 0x1FE], eax
+
+    ; Page Directory Entry
+    lea eax, [es:di + 0x6000] ; 0xE000
+    or eax, PAGE_PRESENT | PAGE_WRITE
+    mov [es:di + 0x5000], eax
 
     ; Page Table Entry
-    lea di, [di + 0x4000]
+    lea di, [di + 0x6000]     ; 0xE000
     mov eax, 0x100000 | PAGE_PRESENT | PAGE_WRITE
 .build_kernel_page_entry:
     mov [es:di], eax
@@ -103,15 +117,22 @@ long_mode:
     mov fs, ax
     mov gs, ax
 
-    ; Place kernel stack at the end of the last kernel page
-    mov rsp, 0xC200000
-
-    ; load_elf_binary expects rsi to contain the address of the kernel
+    ; [rsp] contains the current kernel address
     mov rsi, [kernel_address]
+
+    ; Set up kernel stack
+    mov rsp, KERNEL_STACK
+
+    ; load_elf_binary(rsi: current_kernel_address)
     call load_elf_binary
 
-    ; Virtual address to jump to will be returned in rdi
-    jmp rdi
+    ; Virtual address to jump to will be returned in rax
+    jmp rax
+
+    ; Infinite loop in case we ever return (shouldn't)
+    cli
+    hlt
+    jmp $
 
 [BITS 16]
 build_memory_map:
@@ -163,18 +184,23 @@ ALIGN 4
     .size    dw $ - gdt - 1 
     .address dd gdt
 
-kernel_address dq 0
+kernel_address: dq 0
 
 times 510 - ($ - $$) db 0 ; Boot sector is 512 bytes
 dw 0xAA55 ; Boot signature
 
 CODE_SEG equ gdt.code - gdt
 DATA_SEG equ gdt.data - gdt
+
 MEMORY_MAP_BASE equ 0x1000
-PAGE_TABLE equ 0xA000
+KERNEL_BASE  equ 0xFFFFFFFF80000000
+KERNEL_STACK equ KERNEL_BASE + 0x200000
+
+PAGE_TABLE equ 0x8000
 PAGE_PRESENT equ (1 << 0)
 PAGE_WRITE   equ (1 << 1)
 PAGE_LARGE   equ (1 << 7)
+
 CR0_PAGE equ (1 << 31)
 CR0_PROT equ (1 << 0)
 CR4_PAE equ (1 << 5) 

@@ -1,5 +1,6 @@
 #include "memory.h"
 
+#include "debug.h"
 #include "mutex.h"
 #include "paging.h"
 #include "pma.h"
@@ -11,13 +12,47 @@
 
 static void sort_memory_map();
 static void init_kmalloc();
+static void init_early_bump_allocator();
+static void dump_memory_map();
 
 void init_memory() {
    sort_memory_map();
+   init_early_bump_allocator();
    init_paging();
    init_physical_memory_allocator();
    init_virtual_memory_allocator();
    init_kmalloc();
+}
+
+void * early_bump_allocator::allocate_pages(size_t num_pages) {
+    const auto ret = m_base;
+    const auto size = num_pages * PAGE_SIZE;
+    m_base = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_base) + size);
+    m_size += size;
+    if (m_size > MAX_SIZE) {
+        panic("early bump allocator overflow");
+    }
+    return ret;
+};
+
+static early_bump_allocator * g_early_bump_allocator = nullptr;;
+early_bump_allocator * early_bump_allocator::get() {
+    return g_early_bump_allocator;
+}
+
+static void init_early_bump_allocator() {
+    auto& first_memory_region = g_memory_map[0];
+    auto memory_base = reinterpret_cast<void*>(first_memory_region.base);
+
+    const auto aligned_kernel_end = ((((uintptr_t)&__KERNEL_VMA_END__) / PAGE_SIZE) + 1) * PAGE_SIZE;
+    map_range_size((uintptr_t)memory_base, aligned_kernel_end, early_bump_allocator::MAX_SIZE);
+    g_early_bump_allocator = reinterpret_cast<early_bump_allocator*>(memory_base);
+
+    memory_base = (void*)((uintptr_t) memory_base + sizeof(early_bump_allocator));
+    *g_early_bump_allocator = early_bump_allocator { memory_base };
+
+    first_memory_region.base   += early_bump_allocator::MAX_SIZE;
+    first_memory_region.length -= early_bump_allocator::MAX_SIZE;
 }
 
 memory_map& get_memory_map() { return g_memory_map; }
@@ -26,9 +61,8 @@ void sort_memory_map() {
    // Sort the physical memory map returned by the bootloader, putting the largest usable regions
    // first in our list
    kstd::insertion_sort(g_memory_map, g_num_of_memory_map_entries,
-      [](const memory_map_entry & lhs, const memory_map_entry & rhs) {
-         constexpr auto entry_is_usable =
-            [](const auto & entry) { return entry.type == memory_map_entry::usable; };
+      [](auto&& lhs, auto&& rhs) {
+         constexpr auto entry_is_usable = [](auto && entry) { return entry.type == memory_map_entry::usable; };
          if (!entry_is_usable(lhs)) {
             // If the lhs is unusable, the rhs is better.
             return false;
@@ -41,10 +75,10 @@ void sort_memory_map() {
          return lhs.length > rhs.length;
       }
    );
-   const auto mark_unusable = [](uintptr_t start, uintptr_t end) {
+   const auto mark_unusable = [](auto start, auto end) {
       kstd::transform(g_memory_map, g_num_of_memory_map_entries,
-         [=](memory_map_entry & entry) {
-            if (start <= entry.base && entry.base < end) {
+         [=](auto& entry) {
+            if ((uintptr_t)start <= entry.base && entry.base < (uintptr_t)end) {
                entry.length -= end - entry.base;
                entry.base = end;
                return true;
@@ -55,9 +89,34 @@ void sort_memory_map() {
    };
    // We can't actually use 0x0 - 0x500 because this memory is owned by the BIOS.
    mark_unusable(0x0, 0x500);
-   // The kernel is located at 0x100000 - 0x300000
+
+   // The kernel is located from 0x100000 - 0x300000
    mark_unusable(0x100000, 0x300000);
+
+   dump_memory_map();
 }
+
+void dump_memory_map()
+{
+   for (auto i = 0; i < (int)g_num_of_memory_map_entries; ++i) {
+       const auto entry = g_memory_map[i];
+       const auto entry_type = [&]() {
+           switch(entry.type) {
+               case memory_map_entry::usable: return "usable";
+               case memory_map_entry::reserved: return "reserved";
+               case memory_map_entry::reclaimable: return "reclaimable";
+               case memory_map_entry::nvs: return "nvs";
+               case memory_map_entry::badmemory: return "badmemory";
+               default: __builtin_unreachable();
+           }
+       }();
+       debug::printf(
+               "memory_map[%d]:\n"
+               "\ttype: %s\n"
+               "\tbase: %lx\n"
+               "\tsize: %lx\n", i, entry_type, entry.base, entry.length);
+   }
+};
 
 struct allocation {
    size_t       size;
@@ -125,10 +184,9 @@ void * kmalloc(size_t n) {
    const auto pages_needed = allocation->physical_page_list_size;
 
    for (size_t page = 0; page < pages_needed; ++page) {
-      const auto page_offset  = page * PAGE_SIZE;
-      const auto virtual_page_address = reinterpret_cast<uintptr_t>(virtual_address) + page_offset;
-      const auto virtual_page  = reinterpret_cast<void *>(virtual_page_address);
-      const auto physical_page = get_physical_page();
+      const auto page_offset   = page * PAGE_SIZE;
+      const auto virtual_page  = reinterpret_cast<uintptr_t>(virtual_address) + page_offset;
+      const auto physical_page = reinterpret_cast<uintptr_t>(get_physical_page());
       map_page(physical_page, virtual_page);
 
       allocation->physical_pages_used[page] = reinterpret_cast<uintptr_t>(physical_page);
@@ -160,8 +218,7 @@ void kfree(void * p) {
       free_physical_page(physical_page_address);
 
       const auto page_offset  = page * PAGE_SIZE;
-      const auto virtual_page_address = reinterpret_cast<uintptr_t>(virtual_address) + page_offset;
-      const auto virtual_page  = reinterpret_cast<void *>(virtual_page_address);
+      const auto virtual_page = reinterpret_cast<uintptr_t>(virtual_address) + page_offset;
       unmap_page(virtual_page);
    }
 

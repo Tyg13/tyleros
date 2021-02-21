@@ -8,20 +8,22 @@ load_elf_binary:
     cmp eax, ELF_MAGIC
     jne .end
 
-    mov r8, rsi         ; Store start of binary
+    push rsi            ; Store start of binary
 .load_program_headers:
-    mov r9, [rsi + 32] ; Get offset for start of program table
-    mov dx, [rsi + 56] ; Number of entries
-    add r9, r8         ; r9 tracks the current progam header's start
+    mov rbp, rsi
+    add rbp, [rsi + 32] ; Get offset for start of program table
+                        ; rbp tracks the current program header
+    mov r8, [rsi + 54]  ; Size of a program header
+    mov dx, [rsi + 56]  ; Number of program headers
 .load_program_header:
-    mov ebx, [r9]      ; Get segment type type
-    cmp ebx, 1         ; 1 means load segment -- ignore all others
+    mov ax, word [rbp]  ; Get segment type
+    cmp ax, 1           ; 1 means load segment -- ignore all others
     jne .skip_segment
 
-    mov r11, [r9 + 8]  ; physical offset
-    mov r12, [r9 + 16] ; virtual address
-    mov r13, [r9 + 32] ; physical file size
-    mov r14, [r9 + 40] ; memory size
+    mov r11, [rbp + 8]  ; physical offset
+    mov r12, [rbp + 16] ; virtual address
+    mov r13, [rbp + 32] ; physical file size
+    mov r14, [rbp + 40] ; memory size
 
     ; Clear block
     xor rax, rax
@@ -31,7 +33,7 @@ load_elf_binary:
 
     ; Load p_filesz bytes from file_start + p_offset
     ; to p_vaddr
-    mov r15, r8
+    mov r15, [rsp] ; load file start
     add r15, r11
     mov rsi, r15
     mov rdi, r12
@@ -39,14 +41,15 @@ load_elf_binary:
     rep movsb
 
 .skip_segment:
-    add r10, 8
+    add rbp, r8
 
     dec dx
     jnz .load_program_header
 
 .end:
+    pop rsi
     ; Return address for bootloader to jump to
-    mov rdi, [r8 + 0x18] ; Program entry position
+    mov rax, [rsi + 0x18] ; Program entry position
     ret
 
 ELF_MAGIC equ `\x7fELF`

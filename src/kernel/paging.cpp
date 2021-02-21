@@ -37,8 +37,12 @@ static void * allocate_page_level() {
    return reinterpret_cast<void *>(level_address);
 }
 
-template<bool allocate_level_if_null>
-static auto& get_page_entry(uintptr_t virtual_page_address) {
+static auto& get_page_entry(uintptr_t virtual_page_address, bool allocate_level_if_null) {
+   // We need to hit the page tables in the order
+   // page_map_level_4 -> page_directory_pointer_table -> page_directory -> page_table
+   // For each level, we need a block of memory 4KiB (0x1000 bytes) wide, since each table has 512 (0x200) entries that are 8 bytes wide.
+   // A page itself is 4KiB, so for each level that is null, we allocate a physical page and insert the level there.
+
    const auto page_table_offset             = (virtual_page_address & PAGE_TABLE_MASK            ) >> 12;
    const auto page_directory_offset         = (virtual_page_address & PAGE_DIRECTORY_MASK        ) >> 21;
    const auto page_directory_pointer_offset = (virtual_page_address & PAGE_DIRECTORY_POINTER_MASK) >> 30;
@@ -56,11 +60,6 @@ static auto& get_page_entry(uintptr_t virtual_page_address) {
       return entry;
    };
 
-   // We need to hit the page tables in the order
-   // page_map_level_4 -> page_directory_pointer_table -> page_directory -> page_table
-   // For each level, we need a block of memory 4KiB (0x1000 bytes) wide, since each table has 512 (0x200) entries that are 8 bytes wide.
-   // A page itself is 4KiB, so for each level that is null, we allocate a physical page and insert the level there.
-
    auto pdpt     = maybe_allocate_level_if_null(page_table_base[page_map_level_4_offset]);
    auto pdpt_ptr = reinterpret_cast<page_directory_pointer_table *>(pdpt & ~PREFIX_MASK);
 
@@ -73,36 +72,45 @@ static auto& get_page_entry(uintptr_t virtual_page_address) {
    return (*pt_ptr)[page_table_offset];
 }
 
-void map_page(void * physical_page, void * virtual_page) {
-   auto virtual_page_address = reinterpret_cast<uintptr_t>(virtual_page);
+void map_range(uintptr_t physical_start, uintptr_t physical_end, uintptr_t virtual_start, uintptr_t virtual_end) {
+    for (auto p = physical_start, v = virtual_start; p < physical_end && v < virtual_end; p += PAGE_SIZE, v += PAGE_SIZE) {
+        map_page(p, v);
+    }
+}
 
-   auto& page_entry = get_page_entry<true>(virtual_page_address);
+void map_range_size(uintptr_t physical_start, uintptr_t virtual_start, size_t size) {
+    // Align size to a multiple of a page
+    size = ((size / PAGE_SIZE) + 1) * PAGE_SIZE;
+    return map_range(physical_start, physical_start + size,
+                    virtual_start, virtual_start + size);
+}
+
+void map_page(uintptr_t physical_page, uintptr_t virtual_page) {
+   auto& page_entry = get_page_entry(virtual_page, true);
 
    assert(!(page_entry & PAGE_PRESENT),
          "Tried to map already-present page!\n"
          "Virtual :%p\n"
-         "Physical:%p", virtual_page, physical_page);
+         "Physical:%p", (void*)virtual_page, (void*)physical_page);
 
-   page_entry = reinterpret_cast<uintptr_t>(physical_page) | PAGE_WRITE | PAGE_PRESENT;
+   page_entry = physical_page | PAGE_WRITE | PAGE_PRESENT;
 }
 
-void unmap_page(void * virtual_page) {
-   auto virtual_page_address = reinterpret_cast<uintptr_t>(virtual_page);
-
-   auto &page_entry = get_page_entry<false>(virtual_page_address);
+void unmap_page(uintptr_t virtual_page) {
+   auto &page_entry = get_page_entry(virtual_page, true);
 
    assert(page_entry & PAGE_PRESENT,
          "Tried to unmap non-present page\n"
-         "Virtual:%p", virtual_page);
+         "Virtual:%p", (void*)virtual_page);
 
-   page_entry ^= PAGE_PRESENT;
+   page_entry = page_entry ^ PAGE_PRESENT;
 
-   asm volatile("invlpg (%0)" :: "b"(virtual_page_address) : "memory");
+   asm volatile("invlpg (%0)" :: "b"(virtual_page) : "memory");
 }
 
 void * map_one_page() {
-   const auto physical_address = reinterpret_cast<void *>(get_physical_page());
-   const auto virtual_address  = reinterpret_cast<void *>(get_virtual_pages(PAGE_SIZE));
+   const auto physical_address = reinterpret_cast<uintptr_t>(get_physical_page());
+   const auto virtual_address  = reinterpret_cast<uintptr_t>(get_virtual_pages(PAGE_SIZE));
    map_page(physical_address, virtual_address);
-   return virtual_address;
+   return reinterpret_cast<void*>(virtual_address);
 }

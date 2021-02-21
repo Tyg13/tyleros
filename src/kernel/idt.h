@@ -30,12 +30,14 @@ struct IDT_Entry {
     };
 } __attribute((packed));
 
-void init_interrupts();
+namespace IDT {
+    void init();
 
-inline IDTR get_current_idtr() {
-   IDTR idtr;
-   asm volatile ("sidt %0" :: "m"(idtr));
-   return idtr;
+    inline IDTR get_current_idtr() {
+       IDTR idtr;
+       asm volatile ("sidt %0" :: "m"(idtr));
+       return idtr;
+    }
 }
 
 #endif

@@ -47,7 +47,7 @@ task_switch:
     mov rdi, rsp
     call frame_handler
     ; A new frame (if we switched frames) is returned on the stack
-    ; Restore the context and jump to the frame context
+    ; Restore the context
     pop r15
     pop r14
     pop r13

@@ -42,4 +42,13 @@ extern char __KERNEL_LMA_END__;
 
 const ptrdiff_t KERNEL_VMA_OFFSET = &__KERNEL_VMA_START__ - &__KERNEL_LMA_START__;
 
+struct early_bump_allocator {
+    static constexpr auto MAX_SIZE = 0x100000;
+    void * m_base;
+    size_t m_size = 0;
+
+    void * allocate_pages(size_t num_pages);
+    static early_bump_allocator * get();
+};
+
 #endif
