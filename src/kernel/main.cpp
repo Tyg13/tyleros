@@ -14,14 +14,17 @@
 #include "util.h"
 #include "vga.h"
 
-void kmain()
+void kmain(boot_info* boot)
 {
-   vga::clear_screen();
    enable_sse();
-   IDT::init();
    serial::init();
-   init_gdt();
-   init_memory();
+   gdt::init();
+   IDT::init();
+   memory::init(boot->memory_map_base,
+                boot->num_memory_map_entries,
+                boot->avail_low_mem_start,
+                boot->avail_low_mem_end);
+   vga::clear_screen();
    init_scheduler();
    init_timer();
    init_floppy_driver();

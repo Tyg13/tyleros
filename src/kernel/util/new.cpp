@@ -3,18 +3,17 @@
 #include "memory.h"
 
 void * operator new  (size_t count) {
-   return kmalloc(count);
+    return memory::alloc(count);
 }
 
 void * operator new[](size_t count) {
-   return kmalloc(count);
+    return memory::alloc(count);
 }
 
 void operator delete  (void * p) noexcept {
-   kfree(p);
+    memory::free(p);
 }
 
 void operator delete[](void * p) noexcept {
-   kfree(p);
+    memory::free(p);
 }
-

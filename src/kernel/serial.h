@@ -8,6 +8,7 @@ namespace serial {
         constexpr auto COM1 = 0x3F8;
     }
     void init();
+    bool initialized();
 
     void send(int16_t port, uint8_t b);
 }

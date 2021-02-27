@@ -10,24 +10,39 @@
 #include <stddef.h>
 #include <string.h>
 
+namespace memory {
+
 static void sort_memory_map();
-static void init_kmalloc();
+static void init_alloc();
 static void init_early_bump_allocator();
 static void dump_memory_map();
 
-void init_memory() {
-   sort_memory_map();
-   init_early_bump_allocator();
-   init_paging();
-   init_physical_memory_allocator();
-   init_virtual_memory_allocator();
-   init_kmalloc();
+uint32_t     g_num_of_memory_map_entries = 0;
+memory_map * g_memory_map                = nullptr;
+
+void init(uint32_t memory_map_base,
+          uint32_t num_memory_map_entries,
+          uint32_t avail_low_mem_start,
+          uint32_t avail_low_mem_end) {
+    g_memory_map = reinterpret_cast<memory_map*>(memory_map_base);
+    g_num_of_memory_map_entries = num_memory_map_entries;
+
+    sort_memory_map();
+    init_paging(avail_low_mem_start, avail_low_mem_end);
+    init_early_bump_allocator();
+    init_physical_memory_allocator();
+    init_virtual_memory_allocator();
+    init_alloc();
+}
+
+memory_map& get_memory_map() {
+    return *g_memory_map;
 }
 
 void * early_bump_allocator::allocate_pages(size_t num_pages) {
-    const auto ret = m_base;
+    const auto ret = reinterpret_cast<void*>(m_base);
     const auto size = num_pages * PAGE_SIZE;
-    m_base = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_base) + size);
+    m_base = m_base + size;
     m_size += size;
     if (m_size > MAX_SIZE) {
         panic("early bump allocator overflow");
@@ -35,32 +50,30 @@ void * early_bump_allocator::allocate_pages(size_t num_pages) {
     return ret;
 };
 
-static early_bump_allocator * g_early_bump_allocator = nullptr;;
+static early_bump_allocator * g_early_bump_allocator = nullptr;
 early_bump_allocator * early_bump_allocator::get() {
     return g_early_bump_allocator;
 }
 
 static void init_early_bump_allocator() {
-    auto& first_memory_region = g_memory_map[0];
-    auto memory_base = reinterpret_cast<void*>(first_memory_region.base);
+    auto& first_memory_region = (*g_memory_map)[0];
+    const auto memory_base = first_memory_region.base;
 
-    const auto aligned_kernel_end = ((((uintptr_t)&__KERNEL_VMA_END__) / PAGE_SIZE) + 1) * PAGE_SIZE;
-    map_range_size((uintptr_t)memory_base, aligned_kernel_end, early_bump_allocator::MAX_SIZE);
-    g_early_bump_allocator = reinterpret_cast<early_bump_allocator*>(memory_base);
+    const auto aligned_kernel_end = (uintptr_t)&__KERNEL_VMA_END__;
+    map_range_size(memory_base, aligned_kernel_end, early_bump_allocator::MAX_SIZE);
 
-    memory_base = (void*)((uintptr_t) memory_base + sizeof(early_bump_allocator));
-    *g_early_bump_allocator = early_bump_allocator { memory_base };
+    const auto bump_allocator_base = aligned_kernel_end + sizeof(early_bump_allocator);
+    g_early_bump_allocator = reinterpret_cast<early_bump_allocator*>(aligned_kernel_end);
+    *g_early_bump_allocator = early_bump_allocator { bump_allocator_base };
 
     first_memory_region.base   += early_bump_allocator::MAX_SIZE;
     first_memory_region.length -= early_bump_allocator::MAX_SIZE;
 }
 
-memory_map& get_memory_map() { return g_memory_map; }
-
 void sort_memory_map() {
    // Sort the physical memory map returned by the bootloader, putting the largest usable regions
    // first in our list
-   kstd::insertion_sort(g_memory_map, g_num_of_memory_map_entries,
+   kstd::insertion_sort(*g_memory_map, g_num_of_memory_map_entries,
       [](auto&& lhs, auto&& rhs) {
          constexpr auto entry_is_usable = [](auto && entry) { return entry.type == memory_map_entry::usable; };
          if (!entry_is_usable(lhs)) {
@@ -76,7 +89,7 @@ void sort_memory_map() {
       }
    );
    const auto mark_unusable = [](auto start, auto end) {
-      kstd::transform(g_memory_map, g_num_of_memory_map_entries,
+      kstd::transform(*g_memory_map, g_num_of_memory_map_entries,
          [=](auto& entry) {
             if ((uintptr_t)start <= entry.base && entry.base < (uintptr_t)end) {
                entry.length -= end - entry.base;
@@ -98,24 +111,27 @@ void sort_memory_map() {
 
 void dump_memory_map()
 {
-   for (auto i = 0; i < (int)g_num_of_memory_map_entries; ++i) {
-       const auto entry = g_memory_map[i];
-       const auto entry_type = [&]() {
-           switch(entry.type) {
-               case memory_map_entry::usable: return "usable";
-               case memory_map_entry::reserved: return "reserved";
-               case memory_map_entry::reclaimable: return "reclaimable";
-               case memory_map_entry::nvs: return "nvs";
-               case memory_map_entry::badmemory: return "badmemory";
-               default: __builtin_unreachable();
-           }
-       }();
-       debug::printf(
-               "memory_map[%d]:\n"
-               "\ttype: %s\n"
-               "\tbase: %lx\n"
-               "\tsize: %lx\n", i, entry_type, entry.base, entry.length);
-   }
+    if (!debug::enabled()) {
+        return;
+    }
+    for (auto i = 0; i < (int)g_num_of_memory_map_entries; ++i) {
+        const auto entry = (*g_memory_map)[i];
+        const auto entry_type = [&]() {
+            switch(entry.type) {
+                case memory_map_entry::usable: return "usable";
+                case memory_map_entry::reserved: return "reserved";
+                case memory_map_entry::reclaimable: return "reclaimable";
+                case memory_map_entry::nvs: return "nvs";
+                case memory_map_entry::badmemory: return "badmemory";
+                default: __builtin_unreachable();
+            }
+        }();
+        debug::printf(
+                "memory_map[%d]:\n"
+                "\ttype: %s\n"
+                "\tbase: %lx\n"
+                "\tsize: %lx\n", i, entry_type, entry.base, entry.length);
+    }
 };
 
 struct allocation {
@@ -128,7 +144,7 @@ struct allocation {
 // TODO grow the allocation list when it hits the page limit
 allocation * allocation_list;
 
-void init_kmalloc() {
+void init_alloc() {
    allocation_list = reinterpret_cast<allocation *>(map_one_page());
 
    allocation_list->size                    = 0;
@@ -172,7 +188,7 @@ static void remove_allocation(allocation * node) {
 
 mutex malloc_lock;
 
-void * kmalloc(size_t n) {
+void * alloc(size_t n) {
    mutex_guard lock(malloc_lock);
 
    auto size_with_header = n + sizeof(struct allocation *);
@@ -200,7 +216,7 @@ void * kmalloc(size_t n) {
    return reinterpret_cast<void *>(address_after_header);
 }
 
-void kfree(void * p) {
+void free(void * p) {
    mutex_guard lock(malloc_lock);
 
    const auto header_address = reinterpret_cast<uintptr_t>(p) - sizeof(allocation *);
@@ -224,4 +240,6 @@ void kfree(void * p) {
 
    // Remove the allocation from the allocation list
    remove_allocation(allocation);
+}
+
 }

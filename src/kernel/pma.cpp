@@ -22,7 +22,8 @@ size_t get_size_of_page_stack() {
 }
 
 void init_page_stack() {
-   const auto & largest_usable_memory_map_entry = g_memory_map[0];
+   using memory::PAGE_SIZE;
+   const auto & largest_usable_memory_map_entry = memory::get_memory_map()[0];
    const auto pages_total = largest_usable_memory_map_entry.length / PAGE_SIZE;
 
    // Page align page stack at bottom of largest available memory region

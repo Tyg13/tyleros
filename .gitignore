@@ -1,6 +1,15 @@
 bin
 build
+sysroot
+
+.*
+!.gitignore
+
 *.log
 *.swo
 *.swp
-.gdbinit
+
+
+# Added by cargo
+
+/target

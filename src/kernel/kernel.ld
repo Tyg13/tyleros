@@ -1,7 +1,8 @@
 ENTRY(_start)
 
-KERNEL_VMA_BASE   = 0xFFFFFFFF80000000;
+KERNEL_VMA_BASE   = 0xC000000;
 KERNEL_LMA_BASE   = 0x100000;
+KERNEL_MAX_SIZE   = 2M;
 KERNEL_VMA_OFFSET = KERNEL_VMA_BASE - KERNEL_LMA_BASE;
 
 SECTIONS
@@ -38,12 +39,15 @@ SECTIONS
     .rodata : { *(.rodata) }
     .data : { *(.data) }
     .bss : { *(.bss COMMON) }
-    __KERNEL_VMA_END__ = .;
-    __KERNEL_LMA_END__ = . - (KERNEL_VMA_BASE - KERNEL_LMA_BASE);
 
     /DISCARD/ :
     {
         *(.comment)
         *(.note)
     }
+
+    /* Pad to KERNEL_MAX_SIZE */
+    . = KERNEL_VMA_BASE + KERNEL_MAX_SIZE;
+    __KERNEL_VMA_END__ = .;
+    __KERNEL_LMA_END__ = . - (KERNEL_VMA_BASE - KERNEL_LMA_BASE);
 }

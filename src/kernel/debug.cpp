@@ -8,6 +8,17 @@
 
 namespace debug {
 
+static bool s_enabled = false;
+bool enabled() { return s_enabled; }
+
+bool try_to_enable() {
+    if (!serial::initialized()) {
+        return false;
+    }
+    s_enabled = true;
+    return true;
+}
+
 bool write_str(const char * str) {
     if (str == nullptr) return false;
 

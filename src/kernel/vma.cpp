@@ -5,6 +5,8 @@
 #include "pma.h"
 #include "util.h"
 
+using memory::PAGE_SIZE;
+
 struct free_node {
    void      * base;
    size_t      size;

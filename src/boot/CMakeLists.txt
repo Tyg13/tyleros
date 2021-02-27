@@ -1,8 +1,30 @@
-set(LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/boot.ld")
-set(CMAKE_ASM_NASM_FLAGS "-I${CMAKE_CURRENT_SOURCE_DIR}/")
-set(CMAKE_ASM_NASM_LINK_FLAGS "-T${LINKER_SCRIPT} -N")
+set(CMAKE_ASM_NASM_LINK_FLAGS "-N")
 
-add_executable(boot.elf boot1.asm boot2.asm)
-add_custom_target(elf_loader DEPENDS elf_loader.asm)
-add_dependencies(boot.elf elf_loader)
-set_target_properties(boot.elf PROPERTIES LINK_DEPENDS "${LINKER_SCRIPT}")
+macro(add_stage_linker_opts stage)
+    target_link_options(${stage}.elf PRIVATE "-T${CMAKE_CURRENT_SOURCE_DIR}/${stage}.ld")
+    set_target_properties(${stage}.elf PROPERTIES LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${stage}.ld")
+endmacro()
+
+add_executable(stage1.elf stage1.asm utils.asm)
+target_include_directories(stage1.elf PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+add_stage_linker_opts(stage1)
+add_custom_target(stage1.bin ALL
+    COMMAND "${CMAKE_OBJCOPY}" -O binary "$<TARGET_FILE:stage1.elf>" stage1.bin
+    DEPENDS stage1.elf
+    WORKING_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+
+add_executable(stage2.elf
+    stage2.asm
+    elf_loader.asm
+    read_floppy.asm
+    memory_map.asm
+    fat.asm
+    allocator.asm
+    paging.asm
+    utils.asm)
+target_include_directories(stage2.elf PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+add_stage_linker_opts(stage2)
+add_custom_target(stage2.bin ALL
+    COMMAND "${CMAKE_OBJCOPY}" -O binary "$<TARGET_FILE:stage2.elf>" stage2.bin
+    DEPENDS stage2.elf
+    WORKING_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")

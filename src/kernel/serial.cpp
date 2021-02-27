@@ -64,9 +64,13 @@ static void init_port(uint16_t port);
     
 using port::COM1;
 
+static bool s_initialized = false;
 void init() {
     init_port(COM1);
+    s_initialized = true;
 }
+
+bool initialized() { return s_initialized; }
 
 void init_port(uint16_t port) {
     // Disable interrupts

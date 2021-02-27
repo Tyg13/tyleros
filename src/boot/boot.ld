@@ -1,4 +1,4 @@
 SECTIONS {
-    .boot1 0x0500 : AT(0x000) { *boot1* }
-    .boot2 0x7C00 : AT(0x200) { *boot2* }
+    .boot1 0x500 : AT(0x0) { *boot1* }
+    .boot2 0x700 : AT(0x0) { *boot2* }
 }

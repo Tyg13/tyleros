@@ -4,6 +4,8 @@
 
 #include "string.h"
 
+namespace gdt {
+
 GDTR gdtr;
 
 alignas(0x4)
@@ -49,7 +51,7 @@ tss_entry_struct tss_entry;
 
 static void init_tss();
 
-void init_gdt() {
+void init() {
    // Null descriptor
    gdt[0] = GDT_Entry {{{
       .limit_lo   = 0x0,
@@ -142,4 +144,6 @@ void init_gdt() {
 void init_tss()
 {
    tss_entry = { 0 };
+}
+
 }

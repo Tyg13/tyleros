@@ -36,7 +36,12 @@ namespace kstd {
    }
 }
 
-inline constexpr auto div_round_up = [](const auto& a, const auto &b) { return a / b + (a % b != 0); };
+inline constexpr auto max = [](auto a, auto b) { return a > b ? a : b; };
+inline constexpr auto min = [](auto a, auto b) { return a < b ? a : b; };
+inline constexpr auto div_round_up = [](auto a, auto b) { return a / b + (a % b != 0); };
+inline constexpr auto round_up_to_multiple = [](auto a, auto multiple) {
+    return ((a + multiple - 1) / multiple) * multiple;
+};
 
 __attribute__((format (printf, 1, 2)))
 inline void kprintf(const char * fmt, ...) {
@@ -54,21 +59,22 @@ inline void kprintf(const char * fmt, ...) {
 
    vga::string(str).write();
 
-   kfree(str);
+   delete[] str;
 }
 
 inline void vassert(bool value, const char * msg, va_list args) {
-   if (!value) {
-      if (msg) {
-         char buffer[512];
-         vsprintf(buffer, msg, args);
+   if (value) {
+       return;
+   }
+   if (msg) {
+       char buffer[512];
+       vsprintf(buffer, msg, args);
 
-         vga::string(buffer).write();
-         debug::write_str(buffer);
-      }
+       debug::write_str(buffer);
+       vga::string(buffer).write();
+   }
    asm volatile ("hlt");
 loop: goto loop;
-   }
 }
 
 __attribute__((format (printf, 2, 3)))
@@ -87,8 +93,5 @@ inline void panic(const char * msg, ...) {
    vassert(false, msg, args);
    __builtin_unreachable();
 }
-
-inline constexpr auto max = [](const auto & a, const auto & b) { return a > b ? a : b; };
-inline constexpr auto min = [](const auto & a, const auto & b) { return a < b ? a : b; };
 
 #endif

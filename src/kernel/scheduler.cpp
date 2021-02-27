@@ -11,7 +11,7 @@ static task_context * tasks = nullptr;
 static constexpr auto MAX_TASKS = 0x100;
 static unsigned int current_task = 0;
 static unsigned int total_tasks  = 1;
-static constexpr auto TASK_STACK_SIZE = PAGE_SIZE * 4;
+static constexpr auto TASK_STACK_SIZE = memory::PAGE_SIZE * 4;
 
 unsigned int get_current_task() {
    return current_task;

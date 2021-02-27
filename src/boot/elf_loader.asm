@@ -2,6 +2,7 @@
 
 ; Assumed that rsi points to the start
 ; of a valid ELF binary
+global load_elf_binary
 load_elf_binary:
     ; Check for magic number
     mov eax, [rsi]

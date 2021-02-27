@@ -33,7 +33,7 @@ namespace vga {
    mutex write_lock;
 
    void string::write() && {
-      mutex_guard lock(write_lock);
+      const auto lock = mutex_guard { write_lock };
 
       if (position != null_cursor) {
          current_cursor = position;

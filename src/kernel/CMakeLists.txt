@@ -9,7 +9,7 @@ add_library(asm.o OBJECT
    task.asm)
 target_compile_options (asm.o PRIVATE -g -F dwarf)
 
-add_executable(kernel.debug.elf
+add_executable(kernel.elf
     $<TARGET_OBJECTS:asm.o>
     ${CRTEND_OBJ}
     ${CRTBEGIN_OBJ}
@@ -40,12 +40,17 @@ set_source_files_properties(interrupts.cpp PROPERTIES COMPILE_OPTIONS -mgeneral-
 
 get_target_property(LIBK_SOURCE_DIR k SOURCE_DIR)
 set(LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/kernel.ld")
-target_link_options       (kernel.debug.elf PRIVATE -T${LINKER_SCRIPT} -n -L$<TARGET_FILE_DIR:k>)
-set_target_properties     (kernel.debug.elf PROPERTIES LINK_DEPENDS ${LINKER_SCRIPT})
-target_link_libraries     (kernel.debug.elf PRIVATE -nostdlib -lgcc -lk)
-target_include_directories(kernel.debug.elf PRIVATE SYSTEM ${LIBK_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} util)
+target_link_options       (kernel.elf PRIVATE "-T${LINKER_SCRIPT}" -n "-L$<TARGET_FILE_DIR:k>")
+set_target_properties     (kernel.elf PROPERTIES LINK_DEPENDS "${LINKER_SCRIPT}")
+target_link_libraries     (kernel.elf PRIVATE -nostdlib -lgcc -lk)
+target_include_directories(kernel.elf PRIVATE "${LIBK_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}" util)
 
-add_custom_target(kernel.elf ALL
-    COMMAND strip -g $<TARGET_FILE:kernel.debug.elf> -o kernel.elf
-    DEPENDS kernel.debug.elf
+add_custom_target(kernel.bin ALL
+    COMMAND "${CMAKE_STRIP}" --strip-debug "$<TARGET_FILE:kernel.elf>" -o kernel.bin
+    DEPENDS kernel.elf
+    WORKING_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+
+add_custom_target(kernel.sym ALL
+    COMMAND "${CMAKE_STRIP}" --only-keep-debug "$<TARGET_FILE:kernel.elf>" -o kernel.sym
+    DEPENDS kernel.elf
     WORKING_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
