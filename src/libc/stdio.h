@@ -28,6 +28,9 @@ int vfprintf(FILE *, const char *, va_list);
 int vsprintf(char * str, const char * fmt, va_list args);
 int sprintf(char * str, const char * fmt, ...)
    __attribute__((format (printf, 2, 3)));
+int vsnprintf(char * str, size_t buf_size, const char * fmt, va_list args);
+int snprintf(char * str, size_t buf_size, const char * fmt, ...)
+   __attribute__((format (printf, 3, 4)));
 
 #ifdef __cplusplus
 }
