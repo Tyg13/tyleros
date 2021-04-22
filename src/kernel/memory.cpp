@@ -135,6 +135,7 @@ static allocation * get_new_allocation(size_t n) {
    memset(new_allocation, 0, sizeof(allocation) + pages_needed * sizeof(uintptr_t));
    new_allocation->next = nullptr;
    new_allocation->size = n;
+   new_allocation->physical_pages_used = reinterpret_cast<uintptr_t *>(new_allocation + 1);
    new_allocation->physical_page_list_size = pages_needed;
 
    last->next = new_allocation;
