@@ -13,7 +13,8 @@ namespace kstd {
    void transform(Element array[], int num_of_elements, Transform transform_element) {
       using ResultType = decltype(transform_element(array[0]));
       for (auto i = 0; i < num_of_elements; ++i) {
-         if constexpr (is_same_v<ResultType, bool>) { if (transform_element(array[i])) {
+         if constexpr (is_same_v<ResultType, bool>) {
+            if (transform_element(array[i])) {
                return;
             }
          } else {
