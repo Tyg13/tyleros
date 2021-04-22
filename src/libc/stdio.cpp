@@ -68,10 +68,14 @@ int vsnprintf(char * str, size_t buf_size, const char * fmt, va_list args) {
 
    const auto integer_arg_of_length = [](auto args, auto length) -> long long int {
        switch (length) {
-           case long_long_int: return va_arg(args, long long int);
-           case long_int: return va_arg(args, long int);
-           case short_int: return (short) va_arg(args, int);
-           default: return va_arg(args, int);
+           case long_long_int:
+               return va_arg(args, long long int);
+           case long_int:
+               return va_arg(args, long int);
+           case short_int:
+               return (short) va_arg(args, int);
+           default:
+               return va_arg(args, int);
        }
    };
 
@@ -133,10 +137,14 @@ int vsnprintf(char * str, size_t buf_size, const char * fmt, va_list args) {
                break;
            case 'n':
                switch (length) {
-                   case short_int: *va_arg(args, short*) = (short) num_chars;
-                   case long_int: *va_arg(args, long int*) = (long int) num_chars;
-                   case long_long_int: *va_arg(args, long long int*) = (long long int) num_chars;
-                   default: *va_arg(args, int*) = (int) num_chars;
+                   case short_int:
+                       *va_arg(args, short*) = (short) num_chars;
+                   case long_int:
+                       *va_arg(args, long int*) = (long int) num_chars;
+                   case long_long_int:
+                       *va_arg(args, long long int*) = (long long int) num_chars;
+                   default:
+                       *va_arg(args, int*) = (int) num_chars;
                }
                break;
        }

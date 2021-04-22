@@ -32,10 +32,8 @@ constexpr static auto STATUS_ACTA    = 1 << 0;
 
 volatile bool disk_interrupt_handled = false;
 static void wait_for_disk_interrupt() {
-   while (!disk_interrupt_handled) {
-      asm volatile ("pause");
-   }
-   disk_interrupt_handled = false;
+    SPIN_UNTIL(disk_interrupt_handled);
+    disk_interrupt_handled = false;
 }
 
 [[noreturn]]
@@ -49,65 +47,69 @@ static void fail_if(bool val, const char * message = "") {
    }
 }
 
-template <typename Command>
-const bool issue_parameter_command(Command param) {
-   auto status = io::in(MAIN_STATUS_REGISTER);
-   while (((status = io::in(MAIN_STATUS_REGISTER)) & STATUS_RQM) == 0) {
-      asm volatile("pause");
-   }
-   if ((status & STATUS_DIO) == 0) {
-      io::out(DATA_FIFO, param);
-      return true;
+static void wait_til_fifo_ready() {
+  SPIN_UNTIL((io::in(MAIN_STATUS_REGISTER) & STATUS_RQM) == 0);
+}
+
+const bool issue_parameter_command(uint8_t param) {
+  wait_til_fifo_ready();
+
+  if ((io::in(MAIN_STATUS_REGISTER) & STATUS_DIO) == 0) {
+    io::out(DATA_FIFO, param);
+    return true;
    }
    return false;
 };
 
-template <unsigned N = 1, typename ... Args>
+template <unsigned N, typename ... Args>
 auto issue_command_with_result(uint16_t command, uint8_t (*result)[N], Args&& ... args) {
-   auto retries = 5;
-   while (retries-- > 0) {
-      auto status = io::in(MAIN_STATUS_REGISTER);
-      if ((status & STATUS_RQM) != 0 &&
-          (status & STATUS_DIO) == 0) {
-         io::out(DATA_FIFO, command);
-         const bool commands_succeeded = (issue_parameter_command(args) && ...);
-         if (!commands_succeeded) {
+    for (auto retries = 5; retries > 0; --retries) {
+        auto status = io::in(MAIN_STATUS_REGISTER);
+        if ((status & STATUS_RQM) == 0 || (status & STATUS_DIO) != 0) {
             continue;
-         }
-         if (result) {
+        }
+
+        io::out(DATA_FIFO, command);
+        const bool commands_succeeded = (issue_parameter_command(args) && ...);
+        if (!commands_succeeded) {
+            continue;
+        }
+
+        if (result != nullptr) {
             const auto command_lo = command & 0xF;
             if (command_lo == COMMAND_READ || command_lo == COMMAND_WRITE) {
-               wait_for_disk_interrupt();
+                wait_for_disk_interrupt();
             }
             auto status = io::in(MAIN_STATUS_REGISTER);
-            while (((status = io::in(MAIN_STATUS_REGISTER)) & STATUS_RQM) == 0) {
-               asm volatile("pause");
-            }
-            unsigned result_index = 0;
+
+            wait_til_fifo_ready();
+
+            auto result_index = size_t { 0 };
             while ((status = io::in(MAIN_STATUS_REGISTER) & STATUS_DIO)) {
-               fail_if(result_index >= N, "Result buffer not large enough!");
-               (*result)[result_index] = io::in(DATA_FIFO);
-               ++result_index;
+                fail_if(result_index >= N, "Result buffer not large enough!");
+                (*result)[result_index++] = io::in(DATA_FIFO);
             }
-         }
-         while (((status = io::in(MAIN_STATUS_REGISTER)) & STATUS_RQM) == 0) {
-            asm volatile("pause");
-         }
-         if ((status & STATUS_RQM    ) != 0 &&
-             (status & STATUS_DIO    ) == 0 &&
-             (status & STATUS_CMD_BSY) == 0) {
+        }
+
+        wait_til_fifo_ready();
+
+        status = io::in(MAIN_STATUS_REGISTER);
+        if ((status & STATUS_RQM) != 0 &&
+                (status & STATUS_DIO) == 0 &&
+                (status & STATUS_CMD_BSY) == 0) {
             // Command succeeded, we can stop retrying
             return;
-         }
-      }
-   }
-   fail("issuing floppy command");
+        }
+    }
+    fail("issuing floppy command");
 }
-const auto issue_command = [](const auto command, const auto ... args) {
+
+auto issue_command(const auto command, const auto ... args) {
    return issue_command_with_result<sizeof...(args)>(command, nullptr, args...);
 };
 
 void init_floppy_driver() {
+
    // Send version command, verify result is 0x90
    {
       uint8_t result[1];
@@ -177,7 +179,7 @@ constexpr static auto BYTES_PER_SECTOR = 0x100;
 
 void read_floppy(void * buffer, int lba, int sector_count) {
    const auto transfer_size = BYTES_PER_SECTOR * sector_count;
-   prepare_dma_transfer(FLOPPY_DMA_CHANNEL, buffer, transfer_size, dma_mode::read);
+   dma::prepare_transfer(dma::FLOPPY_CHANNEL, buffer, transfer_size, dma::mode::read);
 
    const auto [cylinder, head, sector] = lba_to_chs(lba);
    const auto end_of_track = (lba / SECTORS_PER_HEAD + 1) * SECTORS_PER_HEAD;
@@ -194,5 +196,5 @@ void read_floppy(void * buffer, int lba, int sector_count) {
       0xff
    );
 
-   memcpy(buffer, dma_buffer_for_channel(FLOPPY_DMA_CHANNEL), transfer_size);
+   memcpy(buffer, dma::buffer_for_channel(dma::FLOPPY_CHANNEL), transfer_size);
 }

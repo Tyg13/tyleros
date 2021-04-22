@@ -8,6 +8,5 @@ void tick();
 void init_timer();
 
 uint64_t get_millis_since_start();
-uint64_t get_seconds_since_start();
 
 #endif

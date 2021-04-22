@@ -3,6 +3,7 @@
 #include "pic.h"
 
 #include "util/io.h"
+#include "util.h"
 
 uint64_t ticks_since_boot = 0;
 uint64_t get_ticks_since_boot() {
@@ -30,7 +31,5 @@ void init_real_time_clock() {
 
 void sleep(uint64_t ticks) {
    const auto start_ticks = get_ticks_since_boot();
-   while (get_ticks_since_boot() - start_ticks > ticks) {
-      asm volatile ("pause");
-   }
+   SPIN_WHILE(get_ticks_since_boot() - start_ticks > ticks);
 }

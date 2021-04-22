@@ -17,11 +17,13 @@ add_executable(kernel.elf
     cmos.cpp
     debug.cpp
     dma.cpp
+    elf.cpp
     gdt.cpp
     filesystem.cpp
     floppy.cpp
     idt.cpp
     interrupts.cpp
+    low_memory_allocator.cpp
     main.cpp
     memory.cpp
     paging.cpp

@@ -1,6 +1,7 @@
 #include "serial.h"
 
 #include "io.h"
+
 namespace Interrupts {
      constexpr auto NONE              = 0b0000;
      constexpr auto DATA_AVAILABLE    = 0b0001;

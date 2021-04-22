@@ -7,6 +7,8 @@
 #include <string.h>
 #include <stdint.h>
 
+namespace scheduler {
+
 static task_context * tasks = nullptr;
 static constexpr auto MAX_TASKS = 0x100;
 static unsigned int current_task = 0;
@@ -17,7 +19,7 @@ unsigned int get_current_task() {
    return current_task;
 }
 
-void init_scheduler() {
+void init() {
    tasks = new task_context[MAX_TASKS];
    memset(tasks, 0, MAX_TASKS * sizeof(task_context));
 
@@ -83,4 +85,6 @@ void exit() {
    asm volatile ("sti" ::: "memory");
    asm volatile ("int $0x28");
    __builtin_unreachable();
+}
+
 }

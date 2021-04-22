@@ -1,6 +1,5 @@
 #ifndef UTIL_H
 #define UTIL_H
-
 #include "debug.h"
 #include "memory.h"
 #include "util/type_traits.h"
@@ -12,10 +11,9 @@
 namespace kstd {
    template <typename Element, typename Transform>
    void transform(Element array[], int num_of_elements, Transform transform_element) {
+      using ResultType = decltype(transform_element(array[0]));
       for (auto i = 0; i < num_of_elements; ++i) {
-         using ResultType = decltype(transform_element(array[i]));
-         if constexpr (is_same_v<ResultType, bool>) {
-            if (transform_element(array[i])) {
+         if constexpr (is_same_v<ResultType, bool>) { if (transform_element(array[i])) {
                return;
             }
          } else {
@@ -57,7 +55,7 @@ inline void kprintf(const char * fmt, ...) {
    vsprintf(str, fmt, args);
    va_end(args);
 
-   vga::string(str).write();
+   vga::string { str };
 
    delete[] str;
 }
@@ -70,8 +68,8 @@ inline void vassert(bool value, const char * msg, va_list args) {
        char buffer[512];
        vsprintf(buffer, msg, args);
 
-       debug::write_str(buffer);
-       vga::string(buffer).write();
+       debug::puts(buffer);
+       if (vga::initialized) { vga::string { buffer }; }
    }
    asm volatile ("hlt");
 loop: goto loop;
@@ -93,5 +91,8 @@ inline void panic(const char * msg, ...) {
    vassert(false, msg, args);
    __builtin_unreachable();
 }
+
+#define SPIN_WHILE(x) while (!(x)) { asm volatile ("pause"); }
+#define SPIN_UNTIL(x) SPIN_WHILE(!(x))
 
 #endif

@@ -31,7 +31,7 @@ namespace kstd {
       using end_iterator   = typename iterator::end;
    public:
       using iterator       = struct iterator;
-      using const_iterator = const iterator *;
+      using const_iterator = const iterator;
       using allocator_type = Allocator;
       using node_allocator = typename allocator_type::template rebind<node>;
 

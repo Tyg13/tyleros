@@ -27,7 +27,7 @@ void init_page_stack() {
    const auto pages_total = largest_usable_memory_map_entry.length / PAGE_SIZE;
 
    // Page align page stack at bottom of largest available memory region
-   base_of_page_stack = largest_usable_memory_map_entry.base & ~(PAGE_SIZE - 1);
+   base_of_page_stack = round_up_to_multiple(largest_usable_memory_map_entry.base, PAGE_SIZE);
    top_of_page_stack  = reinterpret_cast<uintptr_t *>(base_of_page_stack);
 
    // Identity map pages needed for the page stack itself
@@ -43,7 +43,7 @@ void init_page_stack() {
       *top_of_page_stack++ = base_of_page_stack + page * PAGE_SIZE;
    }
 
-   // Adjust page stack pointer, since we overshot by one in the last iteration
+   // Adjust top of page stack, since we overshot by one in the last iteration
    --top_of_page_stack;
 }
 

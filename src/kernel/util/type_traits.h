@@ -38,7 +38,7 @@ namespace kstd {
    template <typename T> auto declval() noexcept -> add_rvalue_reference_t<T>;
 
    template <typename T>
-   void swap(T& lhs, T& rhs) {
+   void swap(T&& lhs, T&& rhs) {
        auto tmp = kstd::move(lhs);
        lhs = kstd::move(rhs);
        rhs = kstd::move(tmp);

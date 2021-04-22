@@ -1,6 +1,7 @@
 #include "vga.h"
 
 #include "mutex.h"
+#include "paging.h"
 
 #include <stdint.h>
 
@@ -30,9 +31,9 @@ namespace vga {
          advance_y_if_needed(cursor);
       };
 
-   mutex write_lock;
+   static mutex write_lock;
 
-   void string::write() && {
+   string::~string() {
       const auto lock = mutex_guard { write_lock };
 
       if (position != null_cursor) {
@@ -65,6 +66,14 @@ namespace vga {
       auto * screen_pos = vga_memory_base + pos.x + pos.y * SCREEN_WIDTH;
       auto color = (uint16_t) ((unsigned char) bg << 4 | (unsigned char) fg);
       *screen_pos = color << 8 | (uint16_t) c;
+   }
+
+   bool initialized = false;
+   void init() {
+       // Identity map the entire VGA buffer.
+       map_range_size(VGA_MEMORY_BASE_ADDRESS, VGA_MEMORY_BASE_ADDRESS, SCREEN_HEIGHT * SCREEN_WIDTH * sizeof(uint16_t));
+       clear_screen();
+       initialized = true;
    }
 
    void clear_screen() {

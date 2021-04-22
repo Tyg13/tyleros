@@ -9,6 +9,7 @@ scheduler_interrupt:
     inc qword [ticks_since_boot]
     cmp byte [should_task_switch], 1
     je task_switch
+
 end_of_interrupt:
     push rax
 

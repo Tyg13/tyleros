@@ -1,6 +1,7 @@
 #include "memory.h"
 
 #include "debug.h"
+#include "low_memory_allocator.h"
 #include "mutex.h"
 #include "paging.h"
 #include "pma.h"
@@ -14,7 +15,6 @@ namespace memory {
 
 static void sort_memory_map();
 static void init_alloc();
-static void init_early_bump_allocator();
 static void dump_memory_map();
 
 uint32_t     g_num_of_memory_map_entries = 0;
@@ -28,8 +28,8 @@ void init(uint32_t memory_map_base,
     g_num_of_memory_map_entries = num_memory_map_entries;
 
     sort_memory_map();
-    init_paging(avail_low_mem_start, avail_low_mem_end);
-    init_early_bump_allocator();
+    low_memory::init(avail_low_mem_start, avail_low_mem_end);
+    init_paging();
     init_physical_memory_allocator();
     init_virtual_memory_allocator();
     init_alloc();
@@ -37,37 +37,6 @@ void init(uint32_t memory_map_base,
 
 memory_map& get_memory_map() {
     return *g_memory_map;
-}
-
-void * early_bump_allocator::allocate_pages(size_t num_pages) {
-    const auto ret = reinterpret_cast<void*>(m_base);
-    const auto size = num_pages * PAGE_SIZE;
-    m_base = m_base + size;
-    m_size += size;
-    if (m_size > MAX_SIZE) {
-        panic("early bump allocator overflow");
-    }
-    return ret;
-};
-
-static early_bump_allocator * g_early_bump_allocator = nullptr;
-early_bump_allocator * early_bump_allocator::get() {
-    return g_early_bump_allocator;
-}
-
-static void init_early_bump_allocator() {
-    auto& first_memory_region = (*g_memory_map)[0];
-    const auto memory_base = first_memory_region.base;
-
-    const auto aligned_kernel_end = (uintptr_t)&__KERNEL_VMA_END__;
-    map_range_size(memory_base, aligned_kernel_end, early_bump_allocator::MAX_SIZE);
-
-    const auto bump_allocator_base = aligned_kernel_end + sizeof(early_bump_allocator);
-    g_early_bump_allocator = reinterpret_cast<early_bump_allocator*>(aligned_kernel_end);
-    *g_early_bump_allocator = early_bump_allocator { bump_allocator_base };
-
-    first_memory_region.base   += early_bump_allocator::MAX_SIZE;
-    first_memory_region.length -= early_bump_allocator::MAX_SIZE;
 }
 
 void sort_memory_map() {
@@ -135,26 +104,26 @@ void dump_memory_map()
 };
 
 struct allocation {
-   size_t       size;
-   size_t       physical_page_list_size;
-   uintptr_t  * physical_pages_used;
-   allocation * next;
+   size_t       size                    = 0;
+   size_t       physical_page_list_size = 0;
+   allocation * next                    = nullptr;
+   uintptr_t  * physical_pages_used     = nullptr;
 };
 
-// TODO grow the allocation list when it hits the page limit
-allocation * allocation_list;
+// TODO grow the allocation list as needed
+auto allocation_list = (allocation *) { nullptr };
 
 void init_alloc() {
-   allocation_list = reinterpret_cast<allocation *>(map_one_page());
+   allocation_list = static_cast<allocation *>(map_one_page());
 
-   allocation_list->size                    = 0;
-   allocation_list->physical_page_list_size = 0;
-   allocation_list->physical_pages_used     = nullptr;
-   allocation_list->next                    = nullptr;
+   *allocation_list = allocation {};
 }
 
 static allocation * get_new_allocation(size_t n) {
-   allocation * last = allocation_list;
+   auto list = allocation_list;
+   assert(list != nullptr, "Tried to get a new allocation, but allocation list is null");
+
+   auto last = list;
    while (last->next) {
       last = last->next;
    }
@@ -166,7 +135,6 @@ static allocation * get_new_allocation(size_t n) {
    memset(new_allocation, 0, sizeof(allocation) + pages_needed * sizeof(uintptr_t));
    new_allocation->next = nullptr;
    new_allocation->size = n;
-   new_allocation->physical_pages_used = reinterpret_cast<uintptr_t *>(new_allocation + 1);
    new_allocation->physical_page_list_size = pages_needed;
 
    last->next = new_allocation;
@@ -177,7 +145,8 @@ static allocation * get_new_allocation(size_t n) {
 static void remove_allocation(allocation * node) {
    // Unlink the allocation from the list
    auto * last = allocation_list;
-   while (last->next) {
+   assert(last != nullptr, "Tried to remove an allocation, but allocation list is null");
+   while (last->next != nullptr) {
       if (last->next == node) {
          break;
       }
@@ -199,7 +168,7 @@ void * alloc(size_t n) {
 
    const auto pages_needed = allocation->physical_page_list_size;
 
-   for (size_t page = 0; page < pages_needed; ++page) {
+   for (auto page = 0; page < (int)pages_needed; ++page) {
       const auto page_offset   = page * PAGE_SIZE;
       const auto virtual_page  = reinterpret_cast<uintptr_t>(virtual_address) + page_offset;
       const auto physical_page = reinterpret_cast<uintptr_t>(get_physical_page());
@@ -229,7 +198,7 @@ void free(void * p) {
 
    // Add each physical page used to the page stack, and unmap each page entry
    uintptr_t * entry = allocation->physical_pages_used;
-   for (size_t page = 0; page < allocation->physical_page_list_size; ++page) {
+   for (auto page = 0; page < (int)allocation->physical_page_list_size; ++page) {
       const auto physical_page_address = reinterpret_cast<void *>(*entry++);
       free_physical_page(physical_page_address);
 

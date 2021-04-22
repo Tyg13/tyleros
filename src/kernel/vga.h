@@ -50,8 +50,11 @@ namespace vga {
       string& fg(color fg_color)      { foreground = fg_color;     return *this; }
       string& bg(color bg_color)      { background = bg_color;     return *this; }
       string& at(cursor new_position) { position   = new_position; return *this; }
-      void write() &&;
+      ~string();
    };
+
+   extern bool initialized;
+   void init();
 
    void clear_screen();
 

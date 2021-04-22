@@ -2,6 +2,7 @@
 
 #include "cmos.h"
 #include "dma.h"
+#include "elf.h"
 #include "filesystem.h"
 #include "floppy.h"
 #include "gdt.h"
@@ -19,17 +20,17 @@ void kmain(boot_info* boot)
    enable_sse();
    serial::init();
    gdt::init();
-   IDT::init();
+   idt::init();
    memory::init(boot->memory_map_base,
                 boot->num_memory_map_entries,
                 boot->avail_low_mem_start,
                 boot->avail_low_mem_end);
-   vga::clear_screen();
-   init_scheduler();
+   vga::init();
+   scheduler::init();
    init_timer();
    init_floppy_driver();
    init_filesystem();
-   enable_task_switch();
+   scheduler::enable_task_switch();
    while(true) {   
       asm volatile ("pause");
    }

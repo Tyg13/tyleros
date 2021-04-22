@@ -19,7 +19,7 @@ bool try_to_enable() {
     return true;
 }
 
-bool write_str(const char * str) {
+bool puts(const char * str) {
     if (str == nullptr) return false;
 
     for (auto c = *str; c != '\0'; c = *++str) {
@@ -28,16 +28,17 @@ bool write_str(const char * str) {
     return true;
 }
 
-static char write_buffer[0x200];
+static constexpr auto WRITE_BUFFER_SIZE = 0x200;
+static char write_buffer[WRITE_BUFFER_SIZE];
 void printf(const char * fmt, ...) {
     va_list args;
     va_start(args, fmt);
 
-    vsprintf(write_buffer, fmt, args);
+    vsnprintf(write_buffer, WRITE_BUFFER_SIZE, fmt, args);
 
     va_end(args);
 
-    write_str(write_buffer);
+    puts(write_buffer);
 }
 
 }

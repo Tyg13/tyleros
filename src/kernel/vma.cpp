@@ -18,7 +18,51 @@ size_t free_list_size;
 size_t max_free_list_size;
 constexpr auto NODES_PER_PAGE = PAGE_SIZE / sizeof(free_node);
 
-bool virtual_memory_allocator_available = false;
+static void add_node_to_free_list(void * base, size_t size);
+
+void init_virtual_memory_allocator() {
+   // Identity map a page for the virtual free list to reside in
+   virtual_free_list = reinterpret_cast<decltype(virtual_free_list)>(get_physical_page());
+   map_page((uintptr_t)virtual_free_list, (uintptr_t)virtual_free_list);
+
+   max_free_list_size = NODES_PER_PAGE;
+
+   // Initial null entry
+   virtual_free_list->base = 0;
+   virtual_free_list->size = 0;
+   virtual_free_list->next = nullptr;
+
+   // 0x0 - 0x200000 is identity mapped
+   // 0xC000000 - 0xC200000 is the kernel
+   //
+   // Hence 0x200000 - 0xC000000 is free,
+   // and 0xC200000 - UINTPTR_MAX is free
+   add_node_to_free_list(reinterpret_cast<void *>( 0x200000),   0xC000000 -  0x200000);
+   add_node_to_free_list(reinterpret_cast<void *>(0xC200000), UINTPTR_MAX - 0xC200000);
+
+   const auto remove_from_free_list = [](const auto base, auto size) {
+      // Round size up to nearest multiple of PAGE_SIZE
+      size = round_up_to_multiple(size, PAGE_SIZE);
+      for (auto node = virtual_free_list; node != nullptr; node = node->next) {
+         const auto end_of_node = reinterpret_cast<char *>(node->base) + node->size;
+         const auto end_of_area = reinterpret_cast<char *>(base) + size;
+         if (base >= node->base && end_of_area <= end_of_node) {
+            // Split node
+            const auto remaining_front_size = reinterpret_cast<uintptr_t>(base)
+                                            - reinterpret_cast<uintptr_t>(node->base);
+            const auto remaining_end_size   = end_of_node - end_of_area;
+            node->size = remaining_front_size;
+            add_node_to_free_list(end_of_area, remaining_end_size);
+            return;
+         }
+      }
+   };
+
+   // Remove the identity pages used by the page stack and the
+   // virtual free list from the free list
+   remove_from_free_list(get_base_of_page_stack(), get_size_of_page_stack());
+   remove_from_free_list(virtual_free_list, PAGE_SIZE);
+}
 
 static void add_node_to_free_list(void * base, size_t size) {
    free_node * node       = nullptr;
@@ -64,51 +108,6 @@ static void add_node_to_free_list(void * base, size_t size) {
    assert(free_list_size != max_free_list_size, "No more free nodes!");
 }
 
-void init_virtual_memory_allocator() {
-   // Identity map a page for the virtual free list to reside in
-   virtual_free_list = reinterpret_cast<decltype(virtual_free_list)>(get_physical_page());
-   map_page((uintptr_t)virtual_free_list, (uintptr_t)virtual_free_list);
-
-   max_free_list_size = NODES_PER_PAGE;
-
-   // Initial null entry
-   virtual_free_list->base = 0;
-   virtual_free_list->size = 0;
-   virtual_free_list->next = nullptr;
-
-   // 0x0 - 0x200000 is identity mapped
-   // 0xC000000 - 0xC200000 is the kernel
-   //
-   // Hence 0x200000 - 0xC000000 is free,
-   // and 0xC200000 - UINTPTR_MAX is free
-   add_node_to_free_list(reinterpret_cast<void *>( 0x200000),   0xC000000 -  0x200000);
-   add_node_to_free_list(reinterpret_cast<void *>(0xC200000), UINTPTR_MAX - 0xC200000);
-
-   const auto remove_from_free_list = [](const auto base, auto size) {
-      // Round size up to nearest multiple of PAGE_SIZE
-      size = ((size + PAGE_SIZE - 1) / PAGE_SIZE) * PAGE_SIZE;
-      for (free_node * node = virtual_free_list; node != nullptr; node = node->next) {
-         const auto end_of_node = reinterpret_cast<char *>(node->base) + node->size;
-         const auto end_of_area = reinterpret_cast<char *>(base) + size;
-         if (base >= node->base && end_of_area <= end_of_node) {
-            // Split node
-            const auto remaining_front_size = reinterpret_cast<uintptr_t>(base)
-                                            - reinterpret_cast<uintptr_t>(node->base);
-            const auto remaining_end_size   = end_of_node - end_of_area;
-            node->size = remaining_front_size;
-            add_node_to_free_list(end_of_area, remaining_end_size);
-            return;
-         }
-      }
-   };
-   // Remove the identity pages used by the page stack and the
-   // virtual free list from the free list
-   remove_from_free_list(get_base_of_page_stack(), get_size_of_page_stack());
-   remove_from_free_list(virtual_free_list, PAGE_SIZE);
-
-   virtual_memory_allocator_available = true;
-}
-
 void * get_virtual_pages(size_t size) {
    assert(size != 0, "Tried to allocate page of size 0!");
 
@@ -125,7 +124,6 @@ void * get_virtual_pages(size_t size) {
       }
    }
    panic("Allocation failed, out of virtual pages!");
-   return nullptr;
 }
 
 void free_virtual_pages(void * address, size_t size) {

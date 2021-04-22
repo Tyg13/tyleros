@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+namespace idt {
+
 struct IDTR {
    uint16_t limit;
    uintptr_t base;
@@ -30,14 +32,14 @@ struct IDT_Entry {
     };
 } __attribute((packed));
 
-namespace IDT {
-    void init();
+void init();
 
-    inline IDTR get_current_idtr() {
-       IDTR idtr;
-       asm volatile ("sidt %0" :: "m"(idtr));
-       return idtr;
-    }
+inline IDTR get_current_idtr() {
+   IDTR idtr;
+   asm volatile ("sidt %0" :: "m"(idtr));
+   return idtr;
+}
+
 }
 
 #endif

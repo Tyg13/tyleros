@@ -6,7 +6,7 @@
 
 using page_level = volatile uintptr_t[512];
 
-void init_paging(uintptr_t avail_low_mem_start, uintptr_t avail_low_mem_end);
+void init_paging();
 
 void map_range(uintptr_t physical_start,
                uintptr_t physical_end,

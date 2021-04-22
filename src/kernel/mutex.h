@@ -7,7 +7,7 @@ struct mutex {
    mutex() {}
    void acquire() {
       while (!__sync_bool_compare_and_swap(&locked, false, true)) {
-         yield();
+          scheduler::yield();
       }
    }
    void release() {

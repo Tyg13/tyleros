@@ -3,7 +3,9 @@
 
 #include <stdint.h>
 
-void init_scheduler();
+namespace scheduler {
+
+void init();
 
 using task = void(void *);
 
@@ -25,9 +27,7 @@ struct task_frame {
    uint64_t rax;
    uint64_t rip;
    uint64_t cs;
-   uint64_t rflags;
-   uint64_t rsp;
-   uint64_t ss;
+   uint64_t rflags; uint64_t rsp; uint64_t ss;
 } __attribute__((packed));
 
 enum class task_state {
@@ -50,12 +50,14 @@ unsigned int get_current_task();
 void yield();
 [[noreturn]] void exit();
 
-extern uint8_t should_task_switch;
+extern "C" uint8_t should_task_switch;
 
 inline void enable_task_switch() {
    asm volatile ("cli" ::: "memory");
    should_task_switch = 1;
    asm volatile ("sti" ::: "memory");
+}
+
 }
 
 #endif

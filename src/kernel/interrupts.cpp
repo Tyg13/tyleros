@@ -18,7 +18,7 @@ INTERRUPT void timer_handler(interrupt_frame* frame);
 INTERRUPT void floppy_handler(interrupt_frame* frame);
 INTERRUPT void interrupt_handler(interrupt_frame* frame);
 
-extern "C" task_frame* frame_handler(task_frame* tcb);
+extern "C" scheduler::task_frame* frame_handler(scheduler::task_frame* tcb);
 extern "C" void scheduler_interrupt();
 
 #undef INTERRUPT
@@ -38,16 +38,15 @@ uintptr_t get_interrupt_handler(unsigned int index) {
 
 static void print_interrupt_frame(interrupt_frame* frame) {
    char message[512];
-   sprintf(message,
+   snprintf(message, 512,
          "RIP:     0x%lx\n"
          "CS:      0x%lx\n"
          "RFLAGS:  0x%lx\n"
          "RSP:     0x%lx\n"
          "SS:      0x%lx\n"
          "TASK ID: %u\n",
-         frame->rip, frame->cs, frame->rflags, frame->rsp, frame->ss, get_current_task());
-   debug::write_str(message);
-   //vga::string(message).write();
+         frame->rip, frame->cs, frame->rflags, frame->rsp, frame->ss, scheduler::get_current_task());
+   debug::puts(message);
 }
 
 void page_fault_handler(interrupt_frame* frame, size_t error_code) {
@@ -56,10 +55,9 @@ void page_fault_handler(interrupt_frame* frame, size_t error_code) {
    const auto access_was_read = (error_code & (1 << 1)) == 0;
    const auto action = access_was_read ? "reading from" : "writing to";
    char message[64];
-   sprintf(message, "Page fault occurred %s 0x%p\n", action, fault_address);
+   snprintf(message, 64, "Page fault occurred %s 0x%p\n", action, fault_address);
 
-   debug::write_str(message);
-   //vga::string(message).write();
+   debug::puts(message);
 
    print_interrupt_frame(frame);
 
@@ -75,8 +73,8 @@ void timer_handler(interrupt_frame* frame) {
 }
 
 void floppy_handler(interrupt_frame* frame) {
-   disk_interrupt_handled = true;
    io::out(PIC1_COMMAND, END_OF_INTERRUPT);
+   disk_interrupt_handled = true;
 }
 
 static constexpr char scancode_to_key[0x40] = {
@@ -92,7 +90,7 @@ void keyboard_handler(interrupt_frame* frame) {
    if (scancode < 0x40) {
       const auto key = scancode_to_key[scancode];
       const char buffer[2] = { key, '\0' };
-      vga::string(buffer).write();
+      vga::string { buffer };
    }
 
    io::out(PIC1_COMMAND, END_OF_INTERRUPT);
@@ -103,6 +101,6 @@ void interrupt_handler(interrupt_frame* frame) {
    panic("Unhandled unknown interrupt!");
 }
 
-task_frame* frame_handler(task_frame* tcb) {
+scheduler::task_frame* frame_handler(scheduler::task_frame* tcb) {
    return task_switch(tcb);
 }

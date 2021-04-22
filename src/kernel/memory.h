@@ -43,15 +43,6 @@ namespace memory {
     constexpr static auto PAGE_WRITE    = 1 << 1;
 
     const ptrdiff_t KERNEL_VMA_OFFSET = &__KERNEL_VMA_START__ - &__KERNEL_LMA_START__;
-
-    struct early_bump_allocator {
-        static constexpr auto MAX_SIZE = 0x100000;
-        uintptr_t m_base;
-        size_t    m_size = 0;
-
-        void * allocate_pages(size_t num_pages);
-        static early_bump_allocator * get();
-    };
 }
 
 #endif
