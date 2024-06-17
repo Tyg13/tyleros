@@ -4,6 +4,7 @@ sysroot
 
 .*
 !.gitignore
+compile_commands.json
 
 *.log
 *.swo
