@@ -24,13 +24,14 @@ namespace kstd {
    }
 
    template <typename Element, typename Compare>
-   void insertion_sort(Element array[], int num_of_elements, Compare cmp) {
-      for (auto i = 0; i < num_of_elements; ++i) {
-         for (auto j = i; j < num_of_elements; ++j) {
-            if (cmp(array[j], array[i])) {
-               swap(array[i], array[j]);
-            }
+   void insertion_sort(Element a[], int n, Compare less) {
+      for (auto i = 1; i < n; ++i) {
+         Element v = a[i];
+         auto j = i - 1;
+         for (; j >= 0 && !less(a[j], v); --j) {
+            a[j + 1] = a[j];
          }
+         a[j+1] = v;
       }
    }
 }
