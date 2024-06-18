@@ -22,5 +22,5 @@ index 00000000000..b60cad0e96d
 --- /dev/null
 +++ b/gcc/config/i386/t-x86_64-elf
 @@ -0,0 +1,2 @@
-+MULTILIB_OPTIONS += -mno-red-zone
++MULTILIB_OPTIONS += mno-red-zone
 +MULTILIB_DIRNAMES += no-red-zone
