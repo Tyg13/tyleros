@@ -7,15 +7,17 @@ if [[ "$DEBUG" == "1" ]]; then
     set -x
 fi
 
-if [[ "$1" == "clean" ]]; then
-    rm -rf build/* bin/* sysroot/*
+BUILD_TYPE="${1:-Debug}"
+if [[ "$2" == "clean" ]]; then
+    rm -rf build bin sysroot
     [ -f Makefile ] && make "$JOBS" clean
     MAKE_ARGS+=("clean")
-    shift
+    shift 2
+else
+    shift 1
 fi
 
-BUILD_TYPE="Debug"
-
+[ -d build ] || mkdir build
 cd build
 
 cmake .. \
