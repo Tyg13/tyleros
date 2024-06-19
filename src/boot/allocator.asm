@@ -12,6 +12,7 @@ avail_mem_end:   dd 0
 
 ; Allocate a `cx` zero'd pages from the available memory (set in stage1)
 ; return address in `eax`
+; clobbers: cx, dx, di
 global allocate_pages
 allocate_pages:
     push ebx

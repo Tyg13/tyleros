@@ -40,7 +40,7 @@ _start:
     add ax, 0x1000
 
     ; Use the memory between the end of stage2 and our stack for allocation
-    mov dword [avail_mem_start], eax
+    mov word [avail_mem_start], ax
     mov dword [avail_mem_end], LOW_MEM_END - PAGE_SIZE
 
     ; Zero out the last page in low memory and put the stack there
