@@ -1,4 +1,5 @@
 ENTRY(_start)
+OUTPUT_FORMAT(elf64-x86-64)
 
 KERNEL_VMA_BASE   = 0xC000000;
 KERNEL_LMA_BASE   = 0x100000;
@@ -36,6 +37,7 @@ SECTIONS
         *(EXCLUDE_FILE (*crtend*) .dtors)
         *crtend*(.dtors)
     }
+    .text : { *(.text) }
     .rodata : { *(.rodata) }
     .data : { *(.data) }
     .bss : { *(.bss COMMON) }
