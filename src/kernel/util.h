@@ -57,7 +57,7 @@ inline void kprintf(const char * fmt, ...) {
    vsprintf(str, fmt, args);
    va_end(args);
 
-   vga::string { str };
+   vga::string::puts(str);
 
    delete[] str;
 }
@@ -71,7 +71,7 @@ inline void vassert(bool value, const char * msg, va_list args) {
        vsprintf(buffer, msg, args);
 
        debug::puts(buffer);
-       if (vga::initialized) { vga::string { buffer }; }
+       if (vga::initialized) { vga::string::puts(buffer); }
    }
    asm volatile ("hlt");
 loop: goto loop;

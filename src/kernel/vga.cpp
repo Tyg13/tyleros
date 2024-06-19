@@ -33,14 +33,15 @@ namespace vga {
 
    static mutex write_lock;
 
-   string::~string() {
+   void string::write() const {
       const auto lock = mutex_guard { write_lock };
 
       if (position != null_cursor) {
          current_cursor = position;
       }
-      while (*text != '\0') {
-         char c = *text;
+      auto *cursor = text;
+      while (*cursor != '\0') {
+         char c = *cursor;
          if (c == '\n') {
             current_cursor.x = 0;
             advance_y_if_needed(current_cursor);
@@ -55,7 +56,7 @@ namespace vga {
             write_color_char_at(c, foreground, background, current_cursor);
             advance(current_cursor);
          }
-         ++text;
+         ++cursor;
       }
    }
 

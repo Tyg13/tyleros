@@ -45,12 +45,13 @@ namespace vga {
       color        foreground = color::white;
       cursor       position   = null_cursor;
    public:
-      string() {}
+      string() = default;
       string(const char * _text) : text(_text) {}
       string& fg(color fg_color)      { foreground = fg_color;     return *this; }
       string& bg(color bg_color)      { background = bg_color;     return *this; }
       string& at(cursor new_position) { position   = new_position; return *this; }
-      ~string();
+      static void puts(const char *text) { string(text).write(); }
+      void write() const;
    };
 
    extern bool initialized;
