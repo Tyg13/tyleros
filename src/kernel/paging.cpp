@@ -10,12 +10,13 @@
 
 using namespace memory;
 
+namespace paging {
 static page_level *page_table_base = nullptr;
 
-void init_paging() {
+void init() {
   uintptr_t base = 0;
-  asm("mov %%cr3, %0" : "=g"(base));
-  page_table_base = reinterpret_cast<decltype(page_table_base)>(base);
+  asm("mov %%cr3, %0" : "=r"(base));
+  page_table_base = reinterpret_cast<page_level *>(base);
 
   // Unmap the zero page so accesses through nullptr cause a page fault
   unmap_page(0);
@@ -124,11 +125,16 @@ void unmap_page(uintptr_t virtual_page) {
   invlpg(virtual_page);
 }
 
+void identity_map_page(uintptr_t address) {
+  return map_page(address, address);
+}
+
 void *map_one_page() {
   const auto physical_address =
-      reinterpret_cast<uintptr_t>(get_physical_page());
+      reinterpret_cast<uintptr_t>(pma::get_physical_page());
   const auto virtual_address =
-      reinterpret_cast<uintptr_t>(get_virtual_pages(PAGE_SIZE));
+      reinterpret_cast<uintptr_t>(vma::get_virtual_pages(PAGE_SIZE));
   map_page(physical_address, virtual_address);
   return reinterpret_cast<void *>(virtual_address);
 }
+} // namespace paging

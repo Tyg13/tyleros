@@ -69,8 +69,8 @@ static void write_color_char_at(const char c, color fg, color bg, cursor pos) {
 bool initialized = false;
 void init() {
   // Identity map the entire VGA buffer.
-  map_range_size(VGA_MEMORY_BASE_ADDRESS, VGA_MEMORY_BASE_ADDRESS,
-                 SCREEN_HEIGHT * SCREEN_WIDTH * sizeof(uint16_t));
+  paging::map_range_size(VGA_MEMORY_BASE_ADDRESS, VGA_MEMORY_BASE_ADDRESS,
+                         SCREEN_HEIGHT * SCREEN_WIDTH * sizeof(uint16_t));
   clear_screen();
   initialized = true;
 }

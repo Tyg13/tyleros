@@ -27,9 +27,9 @@ void init(uint32_t memory_map_base, uint32_t num_memory_map_entries,
 
   sort_memory_map();
   low_memory::init(avail_low_mem_start, avail_low_mem_end);
-  init_paging();
-  init_physical_memory_allocator();
-  init_virtual_memory_allocator();
+  paging::init();
+  pma::init();
+  vma::init();
   init_alloc();
 }
 
@@ -103,7 +103,7 @@ struct allocation {
 auto allocation_list = (allocation *){nullptr};
 
 void init_alloc() {
-  allocation_list = static_cast<allocation *>(map_one_page());
+  allocation_list = static_cast<allocation *>(paging::map_one_page());
 
   *allocation_list = allocation{};
 }
@@ -158,7 +158,7 @@ void *alloc(size_t n) {
 
   auto size_with_header = n + sizeof(struct allocation *);
   size_with_header = ((size_with_header / PAGE_SIZE) + 1) * PAGE_SIZE;
-  const auto virtual_address = get_virtual_pages(size_with_header);
+  const auto virtual_address = vma::get_virtual_pages(size_with_header);
 
   auto allocation = get_new_allocation(size_with_header);
 
@@ -168,8 +168,9 @@ void *alloc(size_t n) {
     const auto page_offset = page * PAGE_SIZE;
     const auto virtual_page =
         reinterpret_cast<uintptr_t>(virtual_address) + page_offset;
-    const auto physical_page = reinterpret_cast<uintptr_t>(get_physical_page());
-    map_page(physical_page, virtual_page);
+    const auto physical_page =
+        reinterpret_cast<uintptr_t>(pma::get_physical_page());
+    paging::map_page(physical_page, virtual_page);
 
     allocation->physical_pages_used[page] =
         reinterpret_cast<uintptr_t>(physical_page);
@@ -194,18 +195,18 @@ void free(void *p) {
 
   // Re-add this virtual address to the free list
   const auto virtual_address = header;
-  free_virtual_pages(virtual_address, allocation->size);
+  vma::free_virtual_pages(virtual_address, allocation->size);
 
   // Add each physical page used to the page stack, and unmap each page entry
   uintptr_t *entry = allocation->physical_pages_used;
   for (auto page = 0; page < (int)allocation->physical_page_list_size; ++page) {
     const auto physical_page_address = reinterpret_cast<void *>(*entry++);
-    free_physical_page(physical_page_address);
+    pma::free_physical_page(physical_page_address);
 
     const auto page_offset = page * PAGE_SIZE;
     const auto virtual_page =
         reinterpret_cast<uintptr_t>(virtual_address) + page_offset;
-    unmap_page(virtual_page);
+    paging::unmap_page(virtual_page);
   }
 
   // Remove the allocation from the allocation list

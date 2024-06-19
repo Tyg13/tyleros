@@ -44,7 +44,7 @@ struct memory_map_entry {
 using memory_map = memory_map_entry[];
 
 // 4KiB pages
-constexpr static auto PAGE_SIZE = 0x1000;
+constexpr static unsigned PAGE_SIZE = 0x1000;
 
 void init(uint32_t memory_map_base, uint32_t num_memory_map_entries,
           uint32_t avail_low_mem_start, uint32_t avail_low_mem_end);

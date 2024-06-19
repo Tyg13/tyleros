@@ -7,6 +7,7 @@
 
 using memory::PAGE_SIZE;
 
+namespace vma {
 struct free_node {
   void *base;
   size_t size;
@@ -20,11 +21,11 @@ constexpr auto NODES_PER_PAGE = PAGE_SIZE / sizeof(free_node);
 
 static void add_node_to_free_list(void *base, size_t size);
 
-void init_virtual_memory_allocator() {
+void init() {
   // Identity map a page for the virtual free list to reside in
   virtual_free_list =
-      reinterpret_cast<decltype(virtual_free_list)>(get_physical_page());
-  map_page((uintptr_t)virtual_free_list, (uintptr_t)virtual_free_list);
+      reinterpret_cast<decltype(virtual_free_list)>(pma::get_physical_page());
+  paging::identity_map_page((uintptr_t)virtual_free_list);
 
   max_free_list_size = NODES_PER_PAGE;
 
@@ -65,7 +66,8 @@ void init_virtual_memory_allocator() {
 
   // Remove the identity pages used by the page stack and the
   // virtual free list from the free list
-  remove_from_free_list(get_base_of_page_stack(), get_size_of_page_stack());
+  remove_from_free_list(pma::get_base_of_page_stack(),
+                        pma::get_size_of_page_stack());
   remove_from_free_list(virtual_free_list, PAGE_SIZE);
 }
 
@@ -140,3 +142,4 @@ void free_virtual_pages(void *address, size_t size) {
   assert(size != 0, "Tried to free page of size 0!");
   add_node_to_free_list(address, size);
 }
+} // namespace vma
