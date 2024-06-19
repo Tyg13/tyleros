@@ -9,7 +9,7 @@ math(EXPR NUM_RESERVED_SECTORS "${NUM_STAGE2_SECTORS} + 1")
 
 add_custom_target(boot.img ALL
     COMMAND dd status=none if=/dev/zero  of=boot.img bs=512 count=2880
-    COMMAND dd status=none if=stage1.bin of=boot.img bs=512 count=1
+    COMMAND dd status=none if=stage1.bin of=boot.img bs=512 count=1 conv=notrunc
     COMMAND mformat -i boot.img -f1440 -k -R "${NUM_RESERVED_SECTORS}" ::/
     COMMAND dd status=none if=stage2.bin of=boot.img bs=512 seek=1
 	count="${NUM_STAGE2_SECTORS}" conv=notrunc
