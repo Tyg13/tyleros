@@ -26,6 +26,9 @@ extern avail_mem_end
 ; paging.asm
 extern map_contiguous_pages
 
+; printing.asm
+extern print_init
+
 global _start
 _start:
     ; ax contains the address of the end of our loaded stage2 binary
@@ -51,6 +54,8 @@ _start:
     mov ax, (LOW_MEM_END - PAGE_SIZE) / 0x10
     mov ss, ax
     mov sp, PAGE_SIZE
+
+    call print_init
 
     ; Allocate a page for the memory map
     mov cx, 1
