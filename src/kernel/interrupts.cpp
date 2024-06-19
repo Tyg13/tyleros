@@ -36,44 +36,54 @@ uintptr_t get_interrupt_handler(unsigned int index) {
    }
 }
 
-static void print_interrupt_frame(interrupt_frame* frame) {
-   char message[512];
+#define SAFE_FN __attribute__((no_caller_saved_registers))
+
+template <typename F, typename... Args>
+__attribute__((always_inline)) inline SAFE_FN auto
+wrap_unsafe_fn(F &&f, Args &&...args) {
+   return f(kstd::forward<Args>(args)...);
+}
+
+SAFE_FN static void print_interrupt_frame(interrupt_frame *frame,
+                                          char message[512]) {
    snprintf(message, 512,
-         "RIP:     0x%lx\n"
-         "CS:      0x%lx\n"
-         "RFLAGS:  0x%lx\n"
-         "RSP:     0x%lx\n"
-         "SS:      0x%lx\n"
-         "TASK ID: %u\n",
-         frame->rip, frame->cs, frame->rflags, frame->rsp, frame->ss, scheduler::get_current_task());
+            "RIP:     0x%lx\n"
+            "CS:      0x%lx\n"
+            "RFLAGS:  0x%lx\n"
+            "RSP:     0x%lx\n"
+            "SS:      0x%lx\n"
+            "TASK ID: %u\n",
+            frame->rip, frame->cs, frame->rflags, frame->rsp, frame->ss,
+            scheduler::get_current_task());
    debug::puts(message);
 }
 
 void page_fault_handler(interrupt_frame* frame, size_t error_code) {
-   void * fault_address;
-   asm volatile ("mov %%cr2, %0" : "=g"(fault_address));
+   void *fault_address;
+   asm volatile ("mov %%cr2, %0" : "=r"(fault_address));
    const auto access_was_read = (error_code & (1 << 1)) == 0;
    const auto action = access_was_read ? "reading from" : "writing to";
-   char message[64];
-   snprintf(message, 64, "Page fault occurred %s 0x%p\n", action, fault_address);
+   char message[512];
+   wrap_unsafe_fn(snprintf, message, 64, "Page fault occurred %s 0x%p\n",
+                      action, fault_address);
 
-   debug::puts(message);
+   wrap_unsafe_fn(debug::puts, message);
 
-   print_interrupt_frame(frame);
+   print_interrupt_frame(frame, message);
 
    const auto page_not_present = (error_code ^ 1) != 0;
    if (page_not_present) {
-      panic("Page was not present!\n");
+     wrap_unsafe_fn(panic, "Page was not present!\n");
    }
 }
 
 void timer_handler(interrupt_frame* frame) {
-   tick();
-   io::out(PIC1_COMMAND, END_OF_INTERRUPT);
+   wrap_unsafe_fn(tick);
+   wrap_unsafe_fn(io::out, PIC1_COMMAND, END_OF_INTERRUPT);
 }
 
 void floppy_handler(interrupt_frame* frame) {
-   io::out(PIC1_COMMAND, END_OF_INTERRUPT);
+   wrap_unsafe_fn(io::out, PIC1_COMMAND, END_OF_INTERRUPT);
    disk_interrupt_handled = true;
 }
 
@@ -86,19 +96,20 @@ static constexpr char scancode_to_key[0x40] = {
 
 void keyboard_handler(interrupt_frame* frame) {
    constexpr auto PS_2_DATA = 0x60;
-   const auto scancode = io::in(PS_2_DATA);
+   const auto scancode = wrap_unsafe_fn(io::in, PS_2_DATA);
    if (scancode < 0x40) {
       const auto key = scancode_to_key[scancode];
       const char buffer[2] = { key, '\0' };
-      vga::string { buffer };
+      wrap_unsafe_fn(vga::string::puts, buffer);
    }
 
-   io::out(PIC1_COMMAND, END_OF_INTERRUPT);
+   wrap_unsafe_fn(io::out, PIC1_COMMAND, END_OF_INTERRUPT);
 }
 
 void interrupt_handler(interrupt_frame* frame) {
-   print_interrupt_frame(frame);
-   panic("Unhandled unknown interrupt!");
+   char message[512];
+   print_interrupt_frame(frame, message);
+   wrap_unsafe_fn(panic, "Unhandled unknown interrupt!");
 }
 
 scheduler::task_frame* frame_handler(scheduler::task_frame* tcb) {
