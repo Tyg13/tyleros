@@ -12,8 +12,8 @@ int vsnprintf(char * str, size_t buf_size, const char * fmt, va_list args) {
    // Output a char into `str` and advance, unless the string is null,
    // or we've reached our buffer's size.
    auto buffer_full = false;
-   auto num_chars = size_t { 0 };
-   const auto put_char = [&](auto c) {
+   size_t num_chars = 0;
+   const auto put_char = [&](char c) {
        if (++num_chars >= buf_size) {
          buffer_full = true;
          return;
@@ -162,7 +162,7 @@ int snprintf(char * str, size_t buf_size, const char * fmt, ...) {
    va_list args;
    va_start(args, fmt);
 
-   const auto ret = vsnprintf(str, buf_size, fmt, args);
+   const int ret = vsnprintf(str, buf_size, fmt, args);
 
    va_end(args);
 
@@ -177,7 +177,7 @@ int sprintf(char * str, const char * fmt, ...) {
    va_list args;
    va_start(args, fmt);
 
-   const auto ret = vsprintf(str, fmt, args);
+   const int ret = vsprintf(str, fmt, args);
 
    va_end(args);
 

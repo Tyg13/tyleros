@@ -63,8 +63,8 @@ const bool issue_parameter_command(uint8_t param) {
 
 template <unsigned N, typename ... Args>
 auto issue_command_with_result(uint16_t command, uint8_t (*result)[N], Args&& ... args) {
-    for (auto retries = 5; retries > 0; --retries) {
-        auto status = io::in(MAIN_STATUS_REGISTER);
+    for (int retries = 5; retries > 0; --retries) {
+        uint8_t status = io::in(MAIN_STATUS_REGISTER);
         if ((status & STATUS_RQM) == 0 || (status & STATUS_DIO) != 0) {
             continue;
         }
@@ -76,7 +76,7 @@ auto issue_command_with_result(uint16_t command, uint8_t (*result)[N], Args&& ..
         }
 
         if (result != nullptr) {
-            const auto command_lo = command & 0xF;
+            const uint16_t command_lo = command & 0xF;
             if (command_lo == COMMAND_READ || command_lo == COMMAND_WRITE) {
                 wait_for_disk_interrupt();
             }
@@ -104,7 +104,7 @@ auto issue_command_with_result(uint16_t command, uint8_t (*result)[N], Args&& ..
     fail("issuing floppy command");
 }
 
-auto issue_command(const auto command, const auto ... args) {
+auto issue_command(uint16_t command, const auto ... args) {
    return issue_command_with_result<sizeof...(args)>(command, nullptr, args...);
 };
 
