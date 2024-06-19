@@ -27,8 +27,8 @@ boot:
     ; Copy this boot sector to 0x0500
     mov si, 0x7c00
     mov di, 0x0500
-    mov cx, 0x100
-    rep movsw
+    mov cx, 0x200
+    rep movsb
 
     mov bx, .relocated
     jmp bx

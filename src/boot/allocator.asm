@@ -32,10 +32,10 @@ allocate_pages:
     set_segment_and_base es, di, ebx
 
 .next_page:
-    ; Zero [es:di] -> [es:di + cx * 2]
+    ; Zero [es:di] -> [es:di + cx]
     xor ax, ax
-    mov cx, PAGE_SIZE >> 1
-    rep stosw
+    mov cx, PAGE_SIZE
+    rep stosb
 
     ; Inc avail mem start by one page
     add dword [avail_mem_start], PAGE_SIZE

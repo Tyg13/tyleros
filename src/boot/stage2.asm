@@ -48,8 +48,8 @@ _start:
     mov es, ax
     mov di, (LOW_MEM_END - PAGE_SIZE) % 0x10
     xor ax, ax
-    mov cx, PAGE_SIZE >> 1
-    rep stosw
+    mov cx, PAGE_SIZE
+    rep stosb
 
     mov ax, (LOW_MEM_END - PAGE_SIZE) / 0x10
     mov ss, ax
