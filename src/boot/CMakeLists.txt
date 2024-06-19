@@ -14,13 +14,14 @@ add_custom_target(stage1.bin ALL
     WORKING_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
 
 add_executable(stage2.elf
-    stage2.asm
-    elf_loader.asm
-    read_floppy.asm
-    memory_map.asm
-    fat.asm
     allocator.asm
+    elf_loader.asm
+    fat.asm
+    memory_map.asm
     paging.asm
+    printing.asm
+    read_floppy.asm
+    stage2.asm
     utils.asm)
 target_include_directories(stage2.elf PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 add_stage_linker_opts(stage2)
