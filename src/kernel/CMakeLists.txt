@@ -5,7 +5,6 @@ add_library(asm.o OBJECT
    crti.asm
    crtn.asm
    start.asm
-   sse.asm
    task.asm)
 target_compile_options (asm.o PRIVATE -g -F dwarf)
 

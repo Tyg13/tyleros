@@ -10,14 +10,12 @@
 #include "memory.h"
 #include "scheduler.h"
 #include "serial.h"
-#include "sse.h"
 #include "timing.h"
 #include "util.h"
 #include "vga.h"
 
 void kmain(boot_info* boot)
 {
-   enable_sse();
    serial::init();
    gdt::init();
    idt::init();
