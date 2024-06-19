@@ -6,9 +6,9 @@
 void init_real_time_clock();
 
 constexpr static uint8_t CMOS_COMMAND = 0x70;
-constexpr static uint8_t CMOS_DATA    = 0x71;
+constexpr static uint8_t CMOS_DATA = 0x71;
 
-constexpr static uint8_t CMOS_NMI_DISABLE  = 0x80;
+constexpr static uint8_t CMOS_NMI_DISABLE = 0x80;
 
 constexpr static uint8_t RTC_SELECT_A = 0x0A;
 constexpr static uint8_t RTC_SELECT_B = 0x0B;
