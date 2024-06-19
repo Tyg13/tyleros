@@ -142,8 +142,8 @@ allocate_level_if_needed:
     ; Zero out table
     set_segment_and_base es, di, edx
     xor ax, ax
-    mov cx, PAGE_SIZE >> 1,
-    rep stosw
+    mov cx, PAGE_SIZE
+    rep stosb
 
     ; Adjust page tables end
     add edx, PAGE_SIZE
