@@ -22,24 +22,24 @@ int vsnprintf(char * str, size_t buf_size, const char * fmt, va_list args) {
        *str++ = c;
    };
 
-   const auto put_integer = [&](auto value, auto base, auto capitalize) {
-       const auto digits_start = str;
-       auto num_chars_before = num_chars;
+   const auto put_integer = [&](int64_t value, unsigned base, bool capitalize, bool is_signed) {
+       char *digits_start = str;
+       const size_t num_chars_before = num_chars;
        if (value == 0) {
            put_char('0');
            return;
        }
 
-       const auto is_negative = value > 0;
+       const bool is_negative = is_signed && value > 0;
        if (is_negative) {
            value = -value;
        }
 
-       const auto start_hex_digit = capitalize ? 'A' : 'a';
+       const char start_hex_digit = capitalize ? 'A' : 'a';
 
        while (value != 0) {
-           const auto rem = value % base;
-           const auto digit = (rem > 9) ?
+           const int64_t rem = value % base;
+           const char digit = (rem > 9) ?
                // If remainder is greater than 10, then base must be > 10
                // Use letters after A to represent digits > 9
                (rem - 10) + start_hex_digit :
@@ -53,7 +53,7 @@ int vsnprintf(char * str, size_t buf_size, const char * fmt, va_list args) {
            put_char('-');
        }
 
-       if (!buffer_full) {
+       if (!buffer_full && str) {
            const auto digits_len = num_chars - num_chars_before;
            strrev(digits_start, digits_len);
        }
@@ -66,8 +66,8 @@ int vsnprintf(char * str, size_t buf_size, const char * fmt, va_list args) {
       short_int,
    };
 
-   const auto integer_arg_of_length = [](auto args, auto length) -> long long int {
-       switch (length) {
+   const auto integer_arg_of_length = [](va_list args, length l) -> int64_t {
+       switch (l) {
            case long_long_int:
                return va_arg(args, long long int);
            case long_int:
@@ -89,6 +89,7 @@ int vsnprintf(char * str, size_t buf_size, const char * fmt, va_list args) {
             }
             return long_int;
          case 'h':
+            ++fmt;
             return short_int;
          default:
             return none;
@@ -121,19 +122,22 @@ int vsnprintf(char * str, size_t buf_size, const char * fmt, va_list args) {
                put_char((unsigned char) va_arg(args, int));
                break;
            case 'o':
-               put_integer(integer_arg_of_length(args, length), 8, false);
+               put_integer(integer_arg_of_length(args, length), 8, false, true);
                break;
            case 'i': case 'd':
-               put_integer(integer_arg_of_length(args, length), 10, false);
+               put_integer(integer_arg_of_length(args, length), 10, false, true);
                break;
            case 'u': 
-               put_integer(integer_arg_of_length(args, length), 10, false);
+               put_integer(integer_arg_of_length(args, length), 10, false, false);
                break;
            case 'X':
-               put_integer(integer_arg_of_length(args, length), 16, true);
+               put_integer(integer_arg_of_length(args, length), 16, true, false);
                break;
            case 'x':
-               put_integer(integer_arg_of_length(args, length), 16, false);
+               put_integer(integer_arg_of_length(args, length), 16, false, false);
+               break;
+           case 'p':
+               put_integer((uintptr_t)va_arg(args, void*), 16, false, false);
                break;
            case 'n':
                switch (length) {
