@@ -2,6 +2,7 @@
 
 #include "serial.h"
 #include "io.h"
+#include "vga.h"
 
 #include <stdio.h>
 #include <stdarg.h>
@@ -25,6 +26,10 @@ bool puts(const char * str) {
     for (auto c = *str; c != '\0'; c = *++str) {
         serial::send(serial::port::COM1, c);
     }
+
+    if (vga::initialized)
+      vga::string::puts(str);
+
     return true;
 }
 
