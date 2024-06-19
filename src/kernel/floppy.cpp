@@ -48,7 +48,7 @@ static void fail_if(bool val, const char * message = "") {
 }
 
 static void wait_til_fifo_ready() {
-  SPIN_UNTIL((io::in(MAIN_STATUS_REGISTER) & STATUS_RQM) == 0);
+  SPIN_UNTIL((io::in(MAIN_STATUS_REGISTER) & STATUS_RQM) != 0);
 }
 
 const bool issue_parameter_command(uint8_t param) {

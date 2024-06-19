@@ -94,7 +94,7 @@ inline void panic(const char * msg, ...) {
    __builtin_unreachable();
 }
 
-#define SPIN_WHILE(x) while (!(x)) { asm volatile ("pause"); }
+#define SPIN_WHILE(x) while (x) { asm volatile ("pause"); }
 #define SPIN_UNTIL(x) SPIN_WHILE(!(x))
 
 #endif
