@@ -14,7 +14,7 @@ if [[ "$2" == "clean" ]]; then
     MAKE_ARGS+=("clean")
     shift 2
 else
-    shift 1
+    shift 1 || true
 fi
 
 [ -d build ] || mkdir build
