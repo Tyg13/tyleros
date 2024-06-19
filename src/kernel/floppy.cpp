@@ -101,7 +101,8 @@ auto issue_command_with_result(uint16_t command, uint8_t (*result)[N], Args&& ..
             return;
         }
     }
-    fail("issuing floppy command");
+    debug::printf("command=%x\n", (int32_t)command);
+    fail("ran out of tries issuing floppy command");
 }
 
 auto issue_command(uint16_t command, const auto ... args) {

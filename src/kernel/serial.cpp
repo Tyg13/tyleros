@@ -1,5 +1,6 @@
 #include "serial.h"
 
+#include "debug.h"
 #include "io.h"
 
 namespace Interrupts {
@@ -69,6 +70,7 @@ static bool s_initialized = false;
 void init() {
     init_port(COM1);
     s_initialized = true;
+    debug::printf("serial: initialized\n");
 }
 
 bool initialized() { return s_initialized; }

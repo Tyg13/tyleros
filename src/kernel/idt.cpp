@@ -1,5 +1,6 @@
 #include "idt.h"
 
+#include "debug.h"
 #include "interrupts.h"
 #include "memory.h"
 #include "pic.h"
@@ -19,6 +20,7 @@ void init() {
    load_idt();
    unmask_irq(1);
    asm volatile ("sti" ::: "memory", "cc");
+   debug::printf("idt: initialized\n");
 }
 
 void load_idt() {

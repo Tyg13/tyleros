@@ -1,5 +1,6 @@
 #include "gdt.h"
 
+#include "debug.h"
 #include "memory.h"
 
 #include "string.h"
@@ -139,6 +140,8 @@ void init() {
    asm volatile ("lgdt %0" :: "m"(gdtr));
    asm volatile ("mov $0x2B, %%ax\t\r" :: "N"(0x2B));
    asm volatile ("ltr %ax");
+
+   debug::printf("gdt: initialized at 0x%p\n", gdt);
 }
 
 void init_tss()
