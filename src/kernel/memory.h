@@ -22,6 +22,17 @@ namespace memory {
         uint64_t  length;
         type      type;
         uint32_t  extended_attributes = 1;
+
+        const char *type_str() const {
+            switch(type) {
+                case memory_map_entry::usable: return "usable";
+                case memory_map_entry::reserved: return "reserved";
+                case memory_map_entry::reclaimable: return "reclaimable";
+                case memory_map_entry::nvs: return "nvs";
+                case memory_map_entry::badmemory: return "badmemory";
+                default: return "<error>";
+            }
+        }
     }
     __attribute((packed));
 

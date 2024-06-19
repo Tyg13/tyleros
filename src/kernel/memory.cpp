@@ -36,6 +36,7 @@ void init(uint32_t memory_map_base,
 }
 
 memory_map& get_memory_map() {
+    assert(g_memory_map != nullptr, "memory map not initialized!");
     return *g_memory_map;
 }
 
@@ -84,22 +85,12 @@ void dump_memory_map()
         return;
     }
     for (auto i = 0; i < (int)g_num_of_memory_map_entries; ++i) {
-        const auto entry = (*g_memory_map)[i];
-        const auto entry_type = [&]() {
-            switch(entry.type) {
-                case memory_map_entry::usable: return "usable";
-                case memory_map_entry::reserved: return "reserved";
-                case memory_map_entry::reclaimable: return "reclaimable";
-                case memory_map_entry::nvs: return "nvs";
-                case memory_map_entry::badmemory: return "badmemory";
-                default: __builtin_unreachable();
-            }
-        }();
-        debug::printf(
-                "memory_map[%d]:\n"
-                "\ttype: %s\n"
-                "\tbase: %lx\n"
-                "\tsize: %lx\n", i, entry_type, entry.base, entry.length);
+        const memory_map_entry &entry = (*g_memory_map)[i];
+        debug::printf("memory_map[%d]:\n"
+                      "\ttype: %s\n"
+                      "\tbase: %lx\n"
+                      "\tsize: %lx\n",
+                      i, entry.type_str(), entry.base, entry.length);
     }
 };
 
