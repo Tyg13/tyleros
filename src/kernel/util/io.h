@@ -17,18 +17,18 @@ namespace io {
    static inline void wait() {
       // Port 0x80 is a debug port used by the BIOS during POST.
       // Should be safe for us to use to wait for out/in calls to properly finish.
-      asm volatile __inline__ ("outb %%al, $0x80" :: "a"(0));
+      asm volatile __inline__ ("outb %%al, $0x80" :: "a"(0) : "memory");
    }
 
    __attribute__((__always_inline__))
    static inline void out(uint16_t port, uint8_t val) {
-      asm volatile __inline__ ("outb %0, %1" : : "a"(val), "Nd"(port));
+      asm volatile __inline__ ("outb %0, %1" : : "a"(val), "Nd"(port) : "memory");
    }
 
    __attribute__((__always_inline__))
    static inline uint8_t in(uint16_t port) {
       uint8_t ret;
-      asm volatile __inline__ ("inb %1, %0" : "=a"(ret) : "Nd"(port));
+      asm volatile __inline__ ("inb %1, %0" : "=a"(ret) : "Nd"(port) : "memory");
       return ret;
    }
 }
