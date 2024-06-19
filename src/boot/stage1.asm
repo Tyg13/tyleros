@@ -24,6 +24,13 @@ boot:
     ; dl contains the drive number, set by the BIOS
     push dx
 
+    ; Zero out segment registers
+    xor ax, ax
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
     ; Copy this boot sector to 0x0500
     mov si, 0x7c00
     mov di, 0x0500

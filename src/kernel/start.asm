@@ -17,6 +17,8 @@ _start:
     or ax, CR4.OSFXSR | CR4.OSXMMEXCPT
     mov cr4, rax
 
+    and rsp, -16
+
     push rdi
     call _init
     pop rdi
