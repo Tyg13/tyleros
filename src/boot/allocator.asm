@@ -6,9 +6,11 @@ PAGE_SIZE equ 0x1000
 
 global avail_mem_start
 global avail_mem_end
+global low_mem_size
 
 avail_mem_start: dd 0
 avail_mem_end:   dd 0
+low_mem_size:    dd 0
 
 ; Allocate a `cx` zero'd pages from the available memory (set in stage1)
 ; return address in `eax`
@@ -18,7 +20,8 @@ allocate_pages:
     push ebx
 
     mov ebx, dword [avail_mem_start]
-    cmp ebx, dword [avail_mem_end]
+    mov edx, dword [avail_mem_end]
+    cmp ebx, edx
     jge .fail ; TODO handle allocation failure
 
     ; dx = num pages

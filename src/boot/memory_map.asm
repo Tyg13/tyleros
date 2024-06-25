@@ -14,11 +14,25 @@ MEMORY_MAP_MAGIC equ 'PAMS' ; SMAP (system map) in LE order
 
 TWO_MEGS equ 0x200000
 
+; eax <- the amount of low memory in bytes starting from 0
+global detect_low_memory
+detect_low_memory:
+    xor eax, eax
+    clc
+    int 0x12
+    jc .error
+    shl eax, 10
+    ret
+
+.error:
+    hlt
+    jmp $
+
 global build_memory_map
 build_memory_map:
     ; ax = MEMORY_MAP_BASE
 
-    ; ebp = num memory map entries
+    ; ebp = num_memory_map_entries
     xor ebp, ebp
 
     ; di = MEMORY_MAP_BASE
@@ -27,30 +41,45 @@ build_memory_map:
     xor ax, ax
     mov es, ax
 
+    ; int15, AX=0xE820 -- Query System Address Map
+    ; EBX   <- continuation value (chained from previous call, if any)
+    ; ES:DI <- buffer ptr (current entry)
+    ; ECX   <- buffer size (size of entry)
+    ; EDX   <- signature (should be 'SMAP')
+    ; returns:
+    ; CF    -> indicates error
+    ; EAX   -> signature (should be 'SMAP'; same as EDX)
+    ; ECX   -> buffer size (number of bytes written to entry)
+    ; EBX   -> continuation (value to get next descriptor)
     xor ebx, ebx
     mov edx, MEMORY_MAP_MAGIC
 .entry:
     mov eax, 0xE820
-    mov ecx, 24
+    mov ecx, SIZE_OF_MEMORY_MAP_ENTRY
     int 0x15
-    jc .done
+    jc .error
 
     mov edx, MEMORY_MAP_MAGIC
     cmp eax, edx
-    jne .done
+    jne .error
 
-    inc ebp
+    inc ebp ; ++num_memory_map_entries
 
     test ebx, ebx
     je .done
 
-    add di, 24
+    add di, SIZE_OF_MEMORY_MAP_ENTRY
 
     jmp .entry
 
 .done:
+    ; return num_memory_map_entries
     mov eax, ebp
     ret
+
+.error:
+    hlt
+    jmp $
 
 ; Not needed right now, I think, but still useful
 ; Also needs adjustment due to the removal of some module data

@@ -5,7 +5,7 @@
 ; Page Mappings
 ;   Physical                 Virtual                  
 ;   0000 0000 - 0008 0000 -> 0000 0000 - 0008 0000
-;   0010 0000 - 0030 0000 -> 0C00 0000 - 0C00 0000
+;   0010 0000 - 0030 0000 -> 0C00 0000 - 0C20 0000
 [BITS 16]
 
 ; elf_loader.asm
@@ -15,6 +15,7 @@ extern load_elf_binary
 extern read_kernel_from_filesystem
 
 ; memory_map.asm
+extern detect_low_memory
 extern build_memory_map
 extern find_first_usable_region_at_least_2mb
 
@@ -22,9 +23,12 @@ extern find_first_usable_region_at_least_2mb
 extern allocate_pages
 extern avail_mem_start
 extern avail_mem_end
+extern low_mem_size
 
 ; paging.asm
 extern map_contiguous_pages
+extern page_tables_start
+extern page_tables_end
 
 ; printing.asm
 extern print_init
@@ -35,25 +39,32 @@ _start:
     ; dl contains our drive number
     mov byte [boot_info.drive_number], dl
 
-    ; Align `ax` to a 0x1000 (4 KiB) boundary
-    and ax, 0xF000
-    add ax, 0x1000
+    ; Align `eax` to a 0x1000 (4 KiB) boundary
+    and eax, -PAGE_SIZE
+    add eax, PAGE_SIZE
 
-    ; Use the memory between the end of stage2 and our stack for allocation
-    mov word [avail_mem_start], ax
-    mov dword [avail_mem_end], LOW_MEM_END - PAGE_SIZE
+    ; Use space between the end of stage2 and the end of low memory for allocation,
+    ; reserving two pages at the end of low mem for the stack
+    mov dword [avail_mem_start], eax
+    call detect_low_memory
+    mov dword [low_mem_size], eax
+    and eax, -PAGE_SIZE
+    sub eax, 2 * PAGE_SIZE
+    mov dword [avail_mem_end], eax
 
-    ; Zero out the last page in low memory and put the stack there
-    mov ax, (LOW_MEM_END - PAGE_SIZE) / 0x10
+    ; Zero out the last two pages in low memory and put the stack there
+    ; es:di = (ax / 0x10 : ax % 0x10)
+    mov di, ax
+    and di, 0xF
+    shr eax, 4
     mov es, ax
-    mov di, (LOW_MEM_END - PAGE_SIZE) % 0x10
     xor ax, ax
-    mov cx, PAGE_SIZE
+    mov cx, 2 * PAGE_SIZE
     rep stosb
 
-    mov ax, (LOW_MEM_END - PAGE_SIZE) / 0x10
+    mov ax, es
     mov ss, ax
-    mov sp, PAGE_SIZE
+    mov sp, 2 * PAGE_SIZE
 
     call print_init
 
@@ -76,25 +87,27 @@ _start:
     ; Use the rest of the available low memory for page tables
     ; aligned to a 0x1000 (4 KiB) boundary
     mov eax, edx
-    and eax, 0xFFFFF000
-    add eax, 0x1000
-    mov dword [page_table], eax
+    and eax, -PAGE_SIZE
+    add eax, PAGE_SIZE
+    mov dword [page_tables_start], eax
+    mov dword [page_tables_end], eax
 
-    ; Identity map the first 0x80 pages (all of low memory)
-    mov esi, 0x0
-    mov edi, 0x0
-    mov cx, 0x80
+    ; Identity map all of low memory
+    xor esi, esi
+    xor edi, edi
+    mov ecx, [low_mem_size]
+    shr ecx, LOG2_PAGE_SIZE
     mov ebx, eax
     mov edx, ebx
     call map_contiguous_pages
-    mov dword [avail_mem_start], edx
 
     ; Map 0x100000 to 0xC000000 (2M for the kernel)
     mov esi, 0x100000
     mov edi, 0xC000000
     mov cx, 0x200
-    mov ebx, dword [page_table]
     call map_contiguous_pages
+
+    mov edx, dword [page_tables_end]
     mov dword [avail_mem_start], edx
 
     mov eax, dword [avail_mem_start]
@@ -114,7 +127,7 @@ _start:
     mov eax, CR4_PAE | CR4_PGE
     mov cr4, eax
 
-    mov edx, dword [page_table]
+    mov edx, dword [page_tables_start]
     mov cr3, edx
 
     mov ecx, 0xC0000080
@@ -174,8 +187,6 @@ ALIGN 4
     .size    dw $ - gdt - 1 
     .address dd gdt
 
-page_table: dd 0
-
 boot_info:
     .num_memory_map_entries: dd 0
     .memory_map_base:        dd 0
@@ -191,9 +202,10 @@ DATA_SEG equ gdt.data - gdt
 
 LOW_MEM_END equ 0x80000
 PAGE_SIZE equ 0x1000
+LOG2_PAGE_SIZE equ 12
 
 KERNEL_BASE  equ 0xC000000
-KERNEL_STACK equ KERNEL_BASE + 0x200000
+KERNEL_STACK equ 0xC200000
 
 PAGE_PRESENT equ (1 << 0)
 PAGE_WRITE   equ (1 << 1)
