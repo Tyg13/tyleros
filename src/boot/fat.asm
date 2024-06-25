@@ -4,14 +4,17 @@ PAGE_SIZE equ 0x1000 ; 1 << 12
 
 BOOT_SECTOR equ 0x500
 
-BYTES_PER_SECTOR     equ BOOT_SECTOR + 0x0B
-SECTORS_PER_CLUSTER  equ BOOT_SECTOR + 0x0D
-NUM_RESERVED_SECTORS equ BOOT_SECTOR + 0x0E
-NUM_OF_FAT_TABLES    equ BOOT_SECTOR + 0x10
-ROOT_DIR_ENTRY_COUNT equ BOOT_SECTOR + 0x11
-SECTORS_PER_FAT      equ BOOT_SECTOR + 0x16
-SECTORS_PER_TRACK    equ BOOT_SECTOR + 0x18
-NUMBER_OF_HEADS      equ BOOT_SECTOR + 0x1A
+BYTES_PER_SECTOR     equ BOOT_SECTOR + 0x0B ; dword
+SECTORS_PER_CLUSTER  equ BOOT_SECTOR + 0x0D ; word
+NUM_RESERVED_SECTORS equ BOOT_SECTOR + 0x0E ; dword
+NUM_OF_FAT_TABLES    equ BOOT_SECTOR + 0x10 ; word
+ROOT_DIR_ENTRY_COUNT equ BOOT_SECTOR + 0x11 ; dword
+SECTORS_PER_FAT      equ BOOT_SECTOR + 0x16 ; dword
+SECTORS_PER_TRACK    equ BOOT_SECTOR + 0x18 ; dword
+NUMBER_OF_HEADS      equ BOOT_SECTOR + 0x1A ; dword
+
+ENTRY_FIRST_CLUSTER equ 0x1A ; word
+ENTRY_SIZE_IN_BYTES equ 0x1C ; dword
 
 SIZE_OF_DIRECTORY_ENTRY equ 0x20
 
@@ -21,6 +24,10 @@ extern allocate_pages
 extern avail_mem_start
 
 ; dl contains the drive number
+; returns:
+;   eax <- start of loaded kernel
+;   edx <- end of loaded kernel
+;   ecx <- size of loaded kernel (in bytes)
 global read_kernel_from_filesystem
 read_kernel_from_filesystem:
     ; Store drive number
@@ -39,8 +46,7 @@ read_kernel_from_filesystem:
     ; Calculate the first data sector
     ; first_data_sector = (NUM_OF_FAT_TABLES * SECTORS_PER_FAT)
     ;                   + NUM_RESERVED_SECTORS + root_dir_sectors
-    xor bx, bx
-    mov bl, byte [NUM_OF_FAT_TABLES]
+    movzx bx, byte [NUM_OF_FAT_TABLES]
     mov ax, word [SECTORS_PER_FAT]
     mul bx
     add ax, word [root_dir_sectors]
@@ -55,7 +61,7 @@ read_kernel_from_filesystem:
     ; Allocate root dir table
     ; pages = (root_dir_sectors * BYTES_PER_SECTOR) / PAGE_SIZE + 1
     mov cx, word [root_dir_sectors]
-    mov ax, [BYTES_PER_SECTOR]
+    mov ax, word [BYTES_PER_SECTOR]
     mul cx
     shr ax, 12
     inc ax
@@ -82,23 +88,25 @@ read_kernel_from_filesystem:
     mov cx, word [first_root_dir_sector]
     mov ax, word [root_dir_sectors]
 .read_root_dir_sector:
-    mov si, [SECTORS_PER_TRACK]
-    mov di, [NUMBER_OF_HEADS]
+    mov si, word [SECTORS_PER_TRACK]
+    mov di, word [NUMBER_OF_HEADS]
     call read_floppy_sector
-    add ebx, [BYTES_PER_SECTOR]
+    movzx esi, word [BYTES_PER_SECTOR]
+    add ebx, esi
     inc cx
     dec ax
     jnz .read_root_dir_sector
 
     ; Read fat table
     mov ebx, dword [fat_table]
-    mov cx, [NUM_RESERVED_SECTORS]
-    mov ax, [SECTORS_PER_FAT]
+    mov cx, word [NUM_RESERVED_SECTORS]
+    mov ax, word [SECTORS_PER_FAT]
 .read_fat_sector:
-    mov si, [SECTORS_PER_TRACK]
-    mov di, [NUMBER_OF_HEADS]
+    mov si, word [SECTORS_PER_TRACK]
+    mov di, word [NUMBER_OF_HEADS]
     call read_floppy_sector
-    add ebx, [BYTES_PER_SECTOR]
+    movzx esi, word [BYTES_PER_SECTOR]
+    add ebx, esi
     inc cx
     dec ax
     jnz .read_fat_sector
@@ -125,11 +133,14 @@ read_kernel_from_filesystem:
     ; Save kernel file entry address
     push bx
 
+    ; Save kernel file size
+    mov eax, dword [bx + ENTRY_SIZE_IN_BYTES]
+    mov dword [kernel_load_size], eax
+
     ; Allocate pages for kernel image
-    mov ax, [bx + ENTRY_SIZE_IN_BYTES]
-    shr ax, 12
-    inc ax
-    mov cx, ax
+    shr eax, 12
+    inc eax
+    mov ecx, eax
     call allocate_pages
     mov dword [kernel_load_start], eax
     mov dword [kernel_load_end], eax
@@ -148,15 +159,15 @@ read_kernel_from_filesystem:
     xor ah, ah
     ; Sector will be ((cluster - 2) * sectors_per_cluster) + first_data_sector
     sub cx, 2
-    mov al, byte [SECTORS_PER_CLUSTER]
+    movzx ax, byte [SECTORS_PER_CLUSTER]
     mul cx
     mov cx, ax
     add cx, word [first_data_sector]
 
     ; Read next sector
     mov ebx, dword [kernel_load_end]
-    mov si, [SECTORS_PER_TRACK]
-    mov di, [NUMBER_OF_HEADS]
+    mov si, word [SECTORS_PER_TRACK]
+    mov di, word [NUMBER_OF_HEADS]
     mov dx, word [bp]
     call read_floppy_sector
     add dword [kernel_load_end], 0x200
@@ -201,6 +212,7 @@ read_kernel_from_filesystem:
     pop dx
     mov eax, dword [kernel_load_start]
     mov edx, dword [kernel_load_end]
+    mov ecx, dword [kernel_load_size]
     ret
 
 
@@ -213,7 +225,5 @@ root_dir_table: dd 0
 
 kernel_load_start: dd 0
 kernel_load_end:   dd 0
+kernel_load_size:  dd 0
 kernel_name: db "KERNEL  "
-
-ENTRY_FIRST_CLUSTER equ 0x1A
-ENTRY_SIZE_IN_BYTES equ 0x1C
