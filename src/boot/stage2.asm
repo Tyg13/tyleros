@@ -33,7 +33,7 @@ global _start
 _start:
     ; ax contains the address of the end of our loaded stage2 binary
     ; dl contains our drive number
-    mov byte [drive_number], dl
+    mov byte [boot_info.drive_number], dl
 
     ; Align `ax` to a 0x1000 (4 KiB) boundary
     and ax, 0xF000
@@ -66,9 +66,11 @@ _start:
     call build_memory_map
     mov dword [boot_info.num_memory_map_entries], eax
 
-    mov dl, byte [drive_number]
+    mov dl, byte [boot_info.drive_number]
     call read_kernel_from_filesystem
-    mov dword [kernel_physical_base_address], eax
+    mov dword [boot_info.kernel_physical_start], eax
+    mov dword [boot_info.kernel_physical_end], edx
+    mov dword [boot_info.kernel_boot_size], ecx
     mov dword [avail_mem_start], edx
 
     ; Use the rest of the available low memory for page tables
@@ -140,7 +142,7 @@ long_mode:
 
     ; load_elf_binary(rsi: current_kernel_address)
     ; Virtual address to jump to will be returned in rax
-    mov esi, [kernel_physical_base_address]
+    mov esi, [boot_info.kernel_physical_start]
     call load_elf_binary
 
     ; Set up kernel stack
@@ -168,20 +170,21 @@ gdt:
 .data:
     dq 0x0000920000000000
 ALIGN 4
-    dw 0
 .descriptor:
     .size    dw $ - gdt - 1 
     .address dd gdt
 
-drive_number: db 0
 page_table: dd 0
-kernel_physical_base_address: dd 0
 
 boot_info:
     .num_memory_map_entries: dd 0
     .memory_map_base:        dd 0
     .avail_low_mem_start:    dd 0
     .avail_low_mem_end:      dd 0
+    .kernel_physical_start:  dd 0
+    .kernel_physical_end:    dd 0
+    .kernel_boot_size:       dd 0
+    .drive_number:           dd 0
 
 CODE_SEG equ gdt.code - gdt
 DATA_SEG equ gdt.data - gdt

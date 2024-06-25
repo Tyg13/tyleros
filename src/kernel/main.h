@@ -10,6 +10,10 @@ struct boot_info {
   uint32_t memory_map_base;
   uint32_t avail_low_mem_start;
   uint32_t avail_low_mem_end;
+  uint32_t kernel_physical_start;
+  uint32_t kernel_physical_end;
+  uint32_t kernel_boot_size;
+  uint32_t drive_number;
 } __attribute__((packed));
 
 extern "C" void kmain(boot_info *boot);
