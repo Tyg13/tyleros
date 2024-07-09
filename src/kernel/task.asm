@@ -1,14 +1,14 @@
 [BITS 64]
-extern frame_handler
+extern task_switch
 
-extern should_task_switch
+extern task_switching_enabled
 extern ticks_since_boot
 
 global scheduler_interrupt
 scheduler_interrupt:
     inc qword [ticks_since_boot]
-    cmp byte [should_task_switch], 1
-    je task_switch
+    cmp byte [task_switching_enabled], 1
+    je do_task_switch
 
 end_of_interrupt:
     push rax
@@ -27,9 +27,10 @@ end_of_interrupt:
     pop rax
     iretq
 
-task_switch:
+do_task_switch:
     ; Push all registers that weren't already pushed by the processor
     ; when the interrupt fired
+    fxsave [temp_fxsave]
     push rax
     push rbx
     push rcx
@@ -46,8 +47,8 @@ task_switch:
     push r14
     push r15
     mov rdi, rsp
-    call frame_handler
-    ; A new frame (if we switched frames) is returned on the stack
+    call task_switch
+    ; A new task frame (if we switched frames) is returned on the stack
     ; Restore the context
     pop r15
     pop r14
@@ -64,4 +65,10 @@ task_switch:
     pop rcx
     pop rbx
     pop rax
+    fxrstor [temp_fxsave]
     jmp end_of_interrupt
+
+section .bss
+align 16
+global temp_fxsave
+temp_fxsave: resb 0x200

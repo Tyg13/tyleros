@@ -10,6 +10,10 @@ for c in "${GDB_COMMANDS[@]}"; do
     GDB_ARGS+=("-iex" "$c")
 done
 
-bochs -q &>/dev/null &
-#qemu-system-x86_64 -s -S -drive if=floppy,format=raw,readonly=on,file=bin/boot.img &
-cgdb -d gdb "${GDB_ARGS[@]}"
+#bochs -q &>/dev/null &
+qemu-system-x86_64 -gdb tcp::6001 -S \
+    -drive if=floppy,format=raw,readonly=on,file=bin/boot.img \
+    -no-reboot -no-shutdown \
+    -device isa-debug-exit \
+    -serial file:debug.log &
+gdb "${GDB_ARGS[@]}" "$@"

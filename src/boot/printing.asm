@@ -7,15 +7,15 @@ NL equ 0xA
 COLUMNS_PER_LINE equ 80
 
 ; bp <- String ptr (null-terminated)
-; clobbers: bx, cx
 global vga_print
 vga_print:
     push bx
     push cx
+    push dx
     push es
 
-    push TEXT_BUFFER_SEG
-    pop es
+    mov bx, TEXT_BUFFER_SEG
+    mov es, bx
 
     movzx bx, byte [ds:current_column]
     movzx cx, byte [ds:current_line]
@@ -67,6 +67,7 @@ vga_print:
     mov [ds:current_column], bx
     mov [ds:current_line], cx
     pop es
+    pop dx
     pop cx
     pop bx
     ret
@@ -80,15 +81,17 @@ vga_print:
 current_line: db 0
 current_column: db 0
 
+; clobbers: ax, cx, di, bp
 global print_init
 print_init:
+    push es
+
     ; set 80x60 mode
     mov ax, 0x001A
     int 0x10
 
-    push es
-    push TEXT_BUFFER_SEG
-    pop es
+    mov ax, TEXT_BUFFER_SEG
+    mov es, ax
 
     xor di, di
     mov cx, 80 * 60 * 2

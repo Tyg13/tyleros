@@ -1,11 +1,16 @@
 #include "vma.h"
 
+#include "debug.h"
 #include "memory.h"
 #include "paging.h"
 #include "pma.h"
 #include "util.h"
 
+#include <assert.h>
+
 using memory::PAGE_SIZE;
+using memory::PAGE_ALIGN;
+extern char __text_start__;
 
 namespace vma {
 struct free_node {
@@ -23,9 +28,8 @@ static void add_node_to_free_list(void *base, size_t size);
 
 void init() {
   // Identity map a page for the virtual free list to reside in
-  virtual_free_list =
-      reinterpret_cast<decltype(virtual_free_list)>(pma::get_physical_page());
-  paging::identity_map_page((uintptr_t)virtual_free_list);
+  virtual_free_list = reinterpret_cast<free_node *>(pma::get_physical_page());
+  paging::kernel_page_tables.identity_map_page((uintptr_t)virtual_free_list);
 
   max_free_list_size = NODES_PER_PAGE;
 
@@ -35,18 +39,19 @@ void init() {
   virtual_free_list->next = nullptr;
 
   // 0x0 - 0x200000 is identity mapped
-  // 0xC000000 - 0xC200000 is the kernel
+  // KERNEL_START - KERNEL_END is the kernel
   //
-  // Hence 0x200000 - 0xC000000 is free,
-  // and 0xC200000 - UINTPTR_MAX is free
+  // Hence 0x200000 - KERNEL_START is free,
+  // and KERNEL_END - UINTPTR_MAX is free
+  const static uintptr_t KERNEL_START = (uintptr_t)&__text_start__;
+  const static uintptr_t KERNEL_END = KERNEL_START + 0x200000;
   add_node_to_free_list(reinterpret_cast<void *>(0x200000),
-                        0xC000000 - 0x200000);
-  add_node_to_free_list(reinterpret_cast<void *>(0xC200000),
-                        UINTPTR_MAX - 0xC200000);
+                        KERNEL_START - 0x200000);
+  add_node_to_free_list(reinterpret_cast<void *>(KERNEL_END),
+                        UINTPTR_MAX - KERNEL_END);
 
-  const auto remove_from_free_list = [](const auto base, auto size) {
-    // Round size up to nearest multiple of PAGE_SIZE
-    size = round_up_to_multiple(size, PAGE_SIZE);
+  const auto remove_from_free_list = [](void *base, size_t size) {
+    size = kstd::align_to(size, PAGE_ALIGN);
     for (auto node = virtual_free_list; node != nullptr; node = node->next) {
       const auto end_of_node =
           reinterpret_cast<char *>(node->base) + node->size;
@@ -69,6 +74,7 @@ void init() {
   remove_from_free_list(pma::get_base_of_page_stack(),
                         pma::get_size_of_page_stack());
   remove_from_free_list(virtual_free_list, PAGE_SIZE);
+  debug::puts("vma: initialized");
 }
 
 static void add_node_to_free_list(void *base, size_t size) {
@@ -114,11 +120,12 @@ static void add_node_to_free_list(void *base, size_t size) {
   // TODO: grow the free list when it hits max_free_list_size
   ++free_list_size;
 
-  assert(free_list_size != max_free_list_size, "No more free nodes!");
+  assert(free_list_size != max_free_list_size && "No more free nodes!");
 }
 
 void *get_virtual_pages(size_t size) {
-  assert(size != 0, "Tried to allocate page of size 0!");
+  assert(size != 0 && "Tried to allocate page of size 0!");
+  assert(size % PAGE_SIZE == 0 && "size must be page-aligned!");
 
   // Walk the free list for a node of appropriate size.
   for (free_node *node = virtual_free_list; node != nullptr;
@@ -134,12 +141,12 @@ void *get_virtual_pages(size_t size) {
       return free_page_address;
     }
   }
-  panic("Allocation failed, out of virtual pages!");
+  kstd::panic("Allocation failed, out of virtual pages!");
 }
 
 void free_virtual_pages(void *address, size_t size) {
-  assert(address != nullptr, "Tried to free page at 0x0!");
-  assert(size != 0, "Tried to free page of size 0!");
+  assert(address != nullptr && "Tried to free page at 0x0!");
+  assert(size != 0 && "Tried to free page of size 0!");
   add_node_to_free_list(address, size);
 }
 } // namespace vma

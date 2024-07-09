@@ -1,40 +1,47 @@
 #include "memory.h"
 
+#include "alloc.h"
 #include "debug.h"
 #include "low_memory_allocator.h"
-#include "mutex.h"
-#include "paging.h"
 #include "pma.h"
 #include "util.h"
 #include "vma.h"
 
+#include <assert.h>
 #include <stddef.h>
-#include <string.h>
 
 namespace memory {
 
 static void sort_memory_map();
-static void init_alloc();
 static void dump_memory_map();
 
 uint32_t g_num_of_memory_map_entries = 0;
 memory_map *g_memory_map = nullptr;
 
-void init(uint32_t memory_map_base, uint32_t num_memory_map_entries,
-          uint32_t avail_low_mem_start, uint32_t avail_low_mem_end) {
+void init(uint32_t memory_map_base, uint32_t num_memory_map_entries) {
   g_memory_map = reinterpret_cast<memory_map *>(memory_map_base);
   g_num_of_memory_map_entries = num_memory_map_entries;
 
   sort_memory_map();
-  low_memory::init(avail_low_mem_start, avail_low_mem_end);
-  paging::init();
   pma::init();
   vma::init();
-  init_alloc();
+  alloc::init();
+
+  const uintptr_t low_mem_start = low_memory::get_avail_low_mem_start();
+  const uintptr_t low_mem_end = low_memory::get_avail_low_mem_end();
+  debug::puts("Memory initialized:");
+  debug::printf("    Low memory:  0x%0lx - 0x%0lx (%u bytes)\n", low_mem_start,
+                low_mem_end, (uint32_t)low_mem_end - (uint32_t)low_mem_start);
+  for (unsigned i = 0; i < g_num_of_memory_map_entries; ++i) {
+    debug::printf("    Mem%d region: 0x%0lx - 0x%0lx (%lu bytes): %s\n", i,
+                  (*g_memory_map)[i].base,
+                  (*g_memory_map)[i].base + (*g_memory_map)[i].length,
+                  (*g_memory_map)[i].length, (*g_memory_map)[i].type_str());
+  }
 }
 
 memory_map &get_memory_map() {
-  assert(g_memory_map != nullptr, "memory map not initialized!");
+  assert(g_memory_map != nullptr && "memory map not initialized!");
   return *g_memory_map;
 }
 
@@ -79,9 +86,6 @@ void sort_memory_map() {
 }
 
 void dump_memory_map() {
-  if (!debug::enabled()) {
-    return;
-  }
   for (auto i = 0; i < (int)g_num_of_memory_map_entries; ++i) {
     const memory_map_entry &entry = (*g_memory_map)[i];
     debug::printf("memory_map[%d]:\n"
@@ -91,126 +95,4 @@ void dump_memory_map() {
                   i, entry.type_str(), entry.base, entry.length);
   }
 };
-
-struct allocation {
-  size_t size = 0;
-  size_t physical_page_list_size = 0;
-  allocation *next = nullptr;
-  uintptr_t *physical_pages_used = nullptr;
-};
-
-// TODO grow the allocation list as needed
-auto allocation_list = (allocation *){nullptr};
-
-void init_alloc() {
-  allocation_list = static_cast<allocation *>(paging::map_one_page());
-
-  *allocation_list = allocation{};
-}
-
-static allocation *get_new_allocation(size_t n) {
-  auto list = allocation_list;
-  assert(list != nullptr,
-         "Tried to get a new allocation, but allocation list is null");
-
-  auto last = list;
-  while (last->next) {
-    last = last->next;
-  }
-  const auto end_of_last_allocation = reinterpret_cast<uintptr_t *>(last + 1);
-  const auto end_of_last_allocation_page_list =
-      end_of_last_allocation + last->physical_page_list_size;
-  auto new_allocation =
-      reinterpret_cast<allocation *>(end_of_last_allocation_page_list);
-
-  const auto pages_needed = div_round_up(n, PAGE_SIZE);
-  memset(new_allocation, 0,
-         sizeof(allocation) + pages_needed * sizeof(uintptr_t));
-  new_allocation->next = nullptr;
-  new_allocation->size = n;
-  new_allocation->physical_pages_used =
-      reinterpret_cast<uintptr_t *>(new_allocation + 1);
-  new_allocation->physical_page_list_size = pages_needed;
-
-  last->next = new_allocation;
-
-  return new_allocation;
-}
-
-static void remove_allocation(allocation *node) {
-  // Unlink the allocation from the list
-  auto *last = allocation_list;
-  assert(last != nullptr,
-         "Tried to remove an allocation, but allocation list is null");
-  while (last->next != nullptr) {
-    if (last->next == node) {
-      break;
-    }
-    last = last->next;
-  }
-  last->next = nullptr;
-}
-
-mutex malloc_lock;
-
-void *alloc(size_t n) {
-  mutex_guard lock(malloc_lock);
-
-  auto size_with_header = n + sizeof(struct allocation *);
-  size_with_header = ((size_with_header / PAGE_SIZE) + 1) * PAGE_SIZE;
-  const auto virtual_address = vma::get_virtual_pages(size_with_header);
-
-  auto allocation = get_new_allocation(size_with_header);
-
-  const auto pages_needed = allocation->physical_page_list_size;
-
-  for (auto page = 0; page < (int)pages_needed; ++page) {
-    const auto page_offset = page * PAGE_SIZE;
-    const auto virtual_page =
-        reinterpret_cast<uintptr_t>(virtual_address) + page_offset;
-    const auto physical_page =
-        reinterpret_cast<uintptr_t>(pma::get_physical_page());
-    paging::map_page(physical_page, virtual_page);
-
-    allocation->physical_pages_used[page] =
-        reinterpret_cast<uintptr_t>(physical_page);
-  }
-
-  auto header = reinterpret_cast<struct allocation **>(virtual_address);
-  *header = allocation;
-
-  const auto address_after_header =
-      reinterpret_cast<uintptr_t>(header) + sizeof(struct allocation *);
-
-  return reinterpret_cast<void *>(address_after_header);
-}
-
-void free(void *p) {
-  mutex_guard lock(malloc_lock);
-
-  const auto header_address =
-      reinterpret_cast<uintptr_t>(p) - sizeof(allocation *);
-  const auto header = reinterpret_cast<allocation **>(header_address);
-  const auto allocation = *header;
-
-  // Re-add this virtual address to the free list
-  const auto virtual_address = header;
-  vma::free_virtual_pages(virtual_address, allocation->size);
-
-  // Add each physical page used to the page stack, and unmap each page entry
-  uintptr_t *entry = allocation->physical_pages_used;
-  for (auto page = 0; page < (int)allocation->physical_page_list_size; ++page) {
-    const auto physical_page_address = reinterpret_cast<void *>(*entry++);
-    pma::free_physical_page(physical_page_address);
-
-    const auto page_offset = page * PAGE_SIZE;
-    const auto virtual_page =
-        reinterpret_cast<uintptr_t>(virtual_address) + page_offset;
-    paging::unmap_page(virtual_page);
-  }
-
-  // Remove the allocation from the allocation list
-  remove_allocation(allocation);
-}
-
 } // namespace memory

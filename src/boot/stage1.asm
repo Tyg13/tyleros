@@ -52,12 +52,12 @@ boot:
     ; read_floppy_sector(sector: cx, base: bx, drive: dl, sectors_per_track: si, number_of_heads: di)
     call read_floppy_sector
     add bx, [BYTES_PER_SECTOR]
-    cmp cx, NUM_STAGE2_SECTORS
     inc cx
-    jb .read_sector
+    cmp cx, [NUM_RESERVED_SECTORS]
+    jl .read_sector
 
-    ; Return end of stage2 in `ax`
-    mov ax, bx
+    ; Return end of stage2 in `eax`
+    mov eax, ebx
 
     ; Jump to stage 2
     mov bx, 0x700
@@ -67,5 +67,3 @@ boot:
 
 times 510 - ($ - $$) db 0 ; Boot sector is 512 bytes
 dw 0xAA55 ; Boot signature
-
-NUM_STAGE2_SECTORS equ 10

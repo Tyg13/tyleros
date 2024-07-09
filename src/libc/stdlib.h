@@ -16,6 +16,9 @@ int atoi(const char *);
 char *itoa(int value, char *str, int base);
 char *getenv(const char *);
 
+#define EXIT_FAILURE -1
+#define EXIT_SUCCESS 0
+
 #ifdef __cplusplus
 }
 #endif

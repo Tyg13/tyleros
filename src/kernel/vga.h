@@ -1,6 +1,7 @@
 #ifndef VGA_H
 #define VGA_H
 
+#include "mutex.h"
 namespace vga {
 
 enum class color : unsigned char {
@@ -28,6 +29,9 @@ constexpr auto SCREEN_HEIGHT = 25;
 struct cursor {
   int x;
   int y;
+
+  void newline();
+  void reset() { x = 0; y = 0; }
 };
 
 inline bool operator==(const cursor &lhs, const cursor &rhs) {
@@ -38,12 +42,15 @@ inline bool operator!=(const cursor &lhs, const cursor &rhs) {
 }
 
 extern const cursor null_cursor;
+extern kstd::managed_by_mutex<cursor> current_cursor;
 
 class string {
   const char *text = nullptr;
   color background = color::black;
   color foreground = color::white;
   cursor position = null_cursor;
+
+  void write_impl(cursor &c) const;
 
 public:
   string() = default;
@@ -60,8 +67,12 @@ public:
     position = new_position;
     return *this;
   }
-  static void puts(const char *text) { string(text).write(); }
   void write() const;
+  // print to current position
+  static void print(const char *text);
+  // print to current position + newline
+  static void puts(const char *text);
+  static void print_char(char c);
 };
 
 extern bool initialized;
@@ -70,5 +81,7 @@ void init();
 void clear_screen();
 
 } // namespace vga
+
+extern "C" void vga_print(const char *text);
 
 #endif

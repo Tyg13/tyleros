@@ -73,52 +73,52 @@ static bool s_initialized = false;
 void init() {
   init_port(COM1);
   s_initialized = true;
-  debug::printf("serial: initialized\n");
+  debug::puts("serial: initialized");
 }
 
 bool initialized() { return s_initialized; }
 
 void init_port(uint16_t port) {
   // Disable interrupts
-  io::out(INTERRUPTS(port), Interrupts::NONE);
+  io::outb(INTERRUPTS(port), Interrupts::NONE);
 
   // Latch bit controls access to baud divisor
-  io::out(LINE_CONTROL(port), LineControl::DATA_LATCH_ACCESS_BIT);
+  io::outb(LINE_CONTROL(port), LineControl::DATA_LATCH_ACCESS_BIT);
 
   // baud rate is 115'200 ticks per second divided by the baud divisor
-  io::out(BAUD_DIVISOR_LO(port), 3);
-  io::out(BAUD_DIVISOR_HI(port), 0);
+  io::outb(BAUD_DIVISOR_LO(port), 3);
+  io::outb(BAUD_DIVISOR_HI(port), 0);
 
   // 8N1 (8 bits, no parity, 1 stop bit) is standard protocol
   // Both ends of the serial port must agree on this or transmission will get
   // garbled
-  io::out(LINE_CONTROL(port), LineControl::DATA_BITS_8 |
+  io::outb(LINE_CONTROL(port), LineControl::DATA_BITS_8 |
                                   LineControl::PARITY_NONE |
                                   LineControl::STOP_BITS_1);
 
   // Enable Serial FIFO (interrupt at 14 bytes, but we should never trigger
   // that)
-  io::out(FIFO_CONTROL(port),
+  io::outb(FIFO_CONTROL(port),
           FIFOControl::INTERRUPT_TRIGGER_14_BYTES | FIFOControl::ENABLE |
               FIFOControl::CLEAR_TRANSMIT | FIFOControl::CLEAR_RECEIVE);
 
   // Override any error that may have occurred in the meantime
-  io::out(MODEM_CONTROL(port), ModemControl::FORCE_DATA_READY |
+  io::outb(MODEM_CONTROL(port), ModemControl::FORCE_DATA_READY |
                                    ModemControl::FORCE_REQUEST_SEND |
                                    ModemControl::AUX_OUTPUT_2);
 
   // Re-enable data interrupt (enabling access to the port)
-  io::out(INTERRUPTS(port), Interrupts::DATA_AVAILABLE);
+  io::outb(INTERRUPTS(port), Interrupts::DATA_AVAILABLE);
 }
 
 static bool transmit_ready(int16_t port) {
-  return io::in(LINE_STATUS(port)) & LineStatus::TRANSMITTER_BUFFER_EMPTY;
+  return io::inb(LINE_STATUS(port)) & LineStatus::TRANSMITTER_BUFFER_EMPTY;
 }
 
 void send(int16_t port, uint8_t b) {
   while (!transmit_ready(serial::port::COM1))
     ;
-  io::out(DATA(COM1), (uint8_t)b);
+  io::outb(DATA(COM1), (uint8_t)b);
 }
 
 } // namespace serial

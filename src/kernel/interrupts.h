@@ -1,8 +1,9 @@
 #ifndef INTERRUPTS_H
 #define INTERRUPTS_H
 
-#include <stddef.h>
 #include <stdint.h>
+
+namespace interrupts {
 
 struct interrupt_frame {
   uint64_t rip;
@@ -13,6 +14,31 @@ struct interrupt_frame {
 } __attribute__((packed));
 static_assert(sizeof(interrupt_frame) == 40);
 
-uintptr_t get_interrupt_handler(unsigned int vector_index);
+uintptr_t get_handler(unsigned int vector_index);
+
+inline void enable() { asm volatile("sti" ::: "memory", "cc"); }
+inline void disable() { asm volatile("cli" ::: "memory", "cc"); }
+inline bool enabled() {
+  uint64_t flags;
+  asm volatile("pushfq\n"
+               "popq %0\n"
+               : "=&g"(flags));
+  return (flags & (1 << 9)) != 0;
+}
+
+struct scoped_disable {
+  scoped_disable() : interrupts_were_enabled{interrupts::enabled()} {
+    interrupts::disable();
+  }
+  ~scoped_disable() {
+    if (interrupts_were_enabled)
+      interrupts::enable();
+  }
+
+private:
+  bool interrupts_were_enabled;
+};
+
+} // namespace interrupts
 
 #endif

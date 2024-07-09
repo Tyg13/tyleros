@@ -3,3 +3,5 @@ boot: floppy
 gdbstub: enabled=1, port=6001, text_base=0, data_base=0, bss_base=0
 com1: enabled=1, mode=file, dev=debug.log
 log: run.log
+#display_library: x, options="gui_debug"
+#magic_break: enabled=1

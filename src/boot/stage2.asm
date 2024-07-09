@@ -8,6 +8,9 @@
 ;   0010 0000 - 0030 0000 -> 0C00 0000 - 0C20 0000
 [BITS 16]
 
+; a20.asm
+extern check_a20
+
 ; elf_loader.asm
 extern load_elf_binary
 
@@ -31,11 +34,13 @@ extern page_tables_start
 extern page_tables_end
 
 ; printing.asm
+extern got_here_msg
 extern print_init
+extern vga_print
 
 global _start
 _start:
-    ; ax contains the address of the end of our loaded stage2 binary
+    ; eax contains the address of the end of our loaded stage2 binary
     ; dl contains our drive number
     mov byte [boot_info.drive_number], dl
 
@@ -68,6 +73,14 @@ _start:
 
     call print_init
 
+    call check_a20
+    test al, al
+    jnz .a20_good
+
+    hlt
+    jmp $
+
+.a20_good:
     ; Allocate a page for the memory map
     mov cx, 1
     call allocate_pages
@@ -77,12 +90,18 @@ _start:
     call build_memory_map
     mov dword [boot_info.num_memory_map_entries], eax
 
+    mov bp, strings.mem_map_built
+    call vga_print
+
     mov dl, byte [boot_info.drive_number]
     call read_kernel_from_filesystem
     mov dword [boot_info.kernel_physical_start], eax
     mov dword [boot_info.kernel_physical_end], edx
     mov dword [boot_info.kernel_boot_size], ecx
     mov dword [avail_mem_start], edx
+
+    mov bp, strings.kernel_loaded
+    call vga_print
 
     ; Use the rest of the available low memory for page tables
     ; aligned to a 0x1000 (4 KiB) boundary
@@ -95,20 +114,24 @@ _start:
     ; Identity map all of low memory
     xor esi, esi
     xor edi, edi
+    xor ebx, ebx
     mov ecx, [low_mem_size]
     shr ecx, LOG2_PAGE_SIZE
-    mov ebx, eax
-    mov edx, ebx
     call map_contiguous_pages
 
-    ; Map 0x100000 to 0xC000000 (2M for the kernel)
+    ; Map 0x0000'0000'0010'0000 - 0x0000'0000'0030'0000 (0x200 pages,
+    ;  to 0xFFFF'FFFF'8000'0000 - 0xFFFF'FFFF'8020'0000  2M for the kernel)
     mov esi, 0x100000
-    mov edi, 0xC000000
-    mov cx, 0x200
+    mov ebx, KERNEL_BASE_HI
+    mov edi, KERNEL_BASE_LO
+    mov ecx, 0x200
     call map_contiguous_pages
 
-    mov edx, dword [page_tables_end]
-    mov dword [avail_mem_start], edx
+    mov eax, dword [page_tables_end]
+    mov dword [avail_mem_start], eax
+
+    mov bp, strings.paging_init
+    call vga_print
 
     mov eax, dword [avail_mem_start]
     mov dword [boot_info.avail_low_mem_start], eax
@@ -162,13 +185,8 @@ long_mode:
     mov rsp, KERNEL_STACK
 
     ; Pass addr of boot_info to kmain (see kernel/main.h)
-    mov rdi, boot_info
+    lea rdi, [boot_info]
     jmp rax
-
-    ; Infinite loop in case we ever return (shouldn't)
-    cli
-    hlt
-    jmp $
 
 ALIGN 4
 idt:
@@ -187,6 +205,11 @@ ALIGN 4
     .size    dw $ - gdt - 1 
     .address dd gdt
 
+CODE_SEG equ gdt.code - gdt
+DATA_SEG equ gdt.data - gdt
+
+%include "kernel.crc32"
+
 boot_info:
     .num_memory_map_entries: dd 0
     .memory_map_base:        dd 0
@@ -196,16 +219,20 @@ boot_info:
     .kernel_physical_end:    dd 0
     .kernel_boot_size:       dd 0
     .drive_number:           dd 0
+    .kernel_expected_crc32   dd KERNEL_EXPECTED_CRC32
 
-CODE_SEG equ gdt.code - gdt
-DATA_SEG equ gdt.data - gdt
+strings:
+    .mem_map_built: db "Memory map built", 0xA, 0
+    .kernel_loaded: db "Kernel loaded from filesystem", 0xA, 0
+    .paging_init: db "Paging initialized", 0xA, 0
 
-LOW_MEM_END equ 0x80000
+KERNEL_BASE    equ 0xFFFFFFFF80000000
+KERNEL_BASE_HI equ 0xFFFFFFFF
+KERNEL_BASE_LO equ 0x80000000
+KERNEL_STACK   equ KERNEL_BASE + 0x200000
+
 PAGE_SIZE equ 0x1000
 LOG2_PAGE_SIZE equ 12
-
-KERNEL_BASE  equ 0xC000000
-KERNEL_STACK equ 0xC200000
 
 PAGE_PRESENT equ (1 << 0)
 PAGE_WRITE   equ (1 << 1)

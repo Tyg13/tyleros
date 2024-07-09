@@ -10,21 +10,21 @@ uint64_t get_ticks_since_boot() { return ticks_since_boot; }
 
 void init_real_time_clock() {
   // Read value of status register B
-  io::out(CMOS_COMMAND, CMOS_NMI_DISABLE | RTC_SELECT_B);
-  const auto value = io::in(CMOS_DATA);
+  io::outb(CMOS_COMMAND, CMOS_NMI_DISABLE | RTC_SELECT_B);
+  const auto value = io::inb(CMOS_DATA);
 
   // Reselect B (reading resets the CMOS register)
-  io::out(CMOS_COMMAND, CMOS_NMI_DISABLE | RTC_SELECT_B);
+  io::outb(CMOS_COMMAND, CMOS_NMI_DISABLE | RTC_SELECT_B);
 
   // Toggle the interrupt bit
-  io::out(CMOS_DATA, value | RTC_ENABLE_INTERRUPT);
+  io::outb(CMOS_DATA, value | RTC_ENABLE_INTERRUPT);
 
   // Read status register C just in case there were any pending interrupts
-  io::out(CMOS_COMMAND, CMOS_NMI_DISABLE | RTC_SELECT_C);
-  io::in(CMOS_DATA);
+  io::outb(CMOS_COMMAND, CMOS_NMI_DISABLE | RTC_SELECT_C);
+  io::inb(CMOS_DATA);
 
   // Unmask the RTC interrupt
-  unmask_irq(8);
+  unmask_irq(irq::CMOS_RTC);
 }
 
 void sleep(uint64_t ticks) {

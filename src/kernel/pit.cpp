@@ -16,7 +16,7 @@ constexpr static uint8_t PIT_SELECT_CHANNEL_0 = 0x0 << 6;
 
 void init_pit() {
   asm volatile("pushfq\n\tcli" ::: "memory");
-  io::out(PIT_COMMAND,
+  io::outb(PIT_COMMAND,
           PIT_SELECT_CHANNEL_0 | PIT_MODE_2 | PIT_LO_BYTE_HI_BYTE | PIT_BINARY);
   // The base reload frequency is divided by the reload count to obtain the
   // final PIT frequency. Since the reload count is 16 bit, max is technically
@@ -26,10 +26,10 @@ void init_pit() {
   // Ignore above for now
   constexpr uint8_t reload_count_lo = 0x00;
   constexpr uint8_t reload_count_hi = 0x01;
-  io::out(PIT_0_DATA, reload_count_lo);
-  io::out(PIT_0_DATA, reload_count_hi);
+  io::outb(PIT_0_DATA, reload_count_lo);
+  io::outb(PIT_0_DATA, reload_count_hi);
 
   // Unmask the PIT interrupt
-  unmask_irq(0);
+  unmask_irq(irq::PIT);
   asm volatile("popfq\n\tsti" ::: "memory");
 }

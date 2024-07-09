@@ -14,17 +14,17 @@ load_elf_binary:
     mov rbp, rsi
     add rbp, [rsi + 32] ; Get offset for start of program table
                         ; rbp tracks the current program header
-    mov r8, [rsi + 54]  ; Size of a program header
-    mov dx, [rsi + 56]  ; Number of program headers
+    movzx r8,  word [rsi + 54]  ; Size of a program header
+    movzx rdx, word [rsi + 56]  ; Number of program headers
 .load_program_header:
     mov ax, word [rbp]  ; Get segment type
     cmp ax, 1           ; 1 means load segment -- ignore all others
     jne .skip_segment
 
-    mov r11, [rbp + 8]  ; physical offset
-    mov r12, [rbp + 16] ; virtual address
-    mov r13, [rbp + 32] ; physical file size
-    mov r14, [rbp + 40] ; memory size
+    mov r11, qword [rbp + 8]  ; physical offset
+    mov r12, qword [rbp + 16] ; virtual address
+    mov r13, qword [rbp + 32] ; physical file size
+    mov r14, qword [rbp + 40] ; memory size
 
     ; Clear block
     xor rax, rax
@@ -34,7 +34,7 @@ load_elf_binary:
 
     ; Load p_filesz bytes from file_start + p_offset
     ; to p_vaddr
-    mov r15, [rsp] ; load file start
+    mov r15, qword [rsp] ; load file start
     add r15, r11
     mov rsi, r15
     mov rdi, r12

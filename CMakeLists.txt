@@ -19,8 +19,8 @@ if(NOT DEFINED CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
 endif(NOT DEFINED CMAKE_BUILD_TYPE)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --std=c++2a -Wall -Werror -Wno-unused-const-variable -mno-red-zone -ffreestanding -fno-exceptions -fno-rtti -fPIC")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --std=c++2a -Wall -Werror -Wno-unused-const-variable -mno-red-zone -ffreestanding -fno-exceptions -fno-rtti -mcmodel=kernel -fno-pic")
 set(CMAKE_CXX_FLAGS_DEBUG "-ggdb3 -Og")
-set(CMAKE_CXX_FLAGS_RELEASE "-Os")
+set(CMAKE_CXX_FLAGS_RELEASE "-O2 -DNDEBUG")
 
 add_subdirectory(src)

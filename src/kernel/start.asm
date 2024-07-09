@@ -1,9 +1,20 @@
 [BITS 64]
 
 extern _init, _fini, kmain
+extern __bss_start__, __bss_end__
 
 global _start
 _start:
+    and rsp, -16 ; 16-byte align the stack if it wasn't already
+    push rdi ; rdi contains the addr of our boot_info
+
+    ; Zero out bss segment in anticipation of global ctors running
+    lea rdi, [__bss_start__]
+    lea rcx, [__bss_end__]
+    sub rcx, rdi
+    xor al, al
+    rep stosb
+
     ; Enable SSE for global ctors called in _init
     mov rax, cr0
     ; Disable FPU emulation
@@ -17,12 +28,9 @@ _start:
     or ax, CR4.OSFXSR | CR4.OSXMMEXCPT
     mov cr4, rax
 
-    and rsp, -16
-
-    push rdi
     call _init
-    pop rdi
 
+    pop rdi ; kmain(boot_info*)
     call kmain
 
     call _fini

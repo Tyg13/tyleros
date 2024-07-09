@@ -1,17 +1,14 @@
 ENTRY(_start)
 OUTPUT_FORMAT(elf64-x86-64)
 
-KERNEL_VMA_BASE   = 0xC000000;
-KERNEL_LMA_BASE   = 0x100000;
-KERNEL_MAX_SIZE   = 2M;
-KERNEL_VMA_OFFSET = KERNEL_VMA_BASE - KERNEL_LMA_BASE;
+KERNEL_VMA_BASE = 0xFFFFFFFF80000000;
+KERNEL_LMA_BASE = 0x100000;
 
 SECTIONS
 {
-    . = KERNEL_VMA_BASE;
-    __KERNEL_VMA_START__ = .;
-    __KERNEL_LMA_START__ = . - KERNEL_VMA_OFFSET;
-    .init : AT(ADDR(.init) - KERNEL_VMA_OFFSET)
+     . = KERNEL_VMA_BASE;
+    __text_start__ = .;
+    .init : AT(KERNEL_LMA_BASE)
     {
         *crti*(.init)
         *crtbegin*(.init)
@@ -37,19 +34,25 @@ SECTIONS
         *(EXCLUDE_FILE (*crtend*) .dtors)
         *crtend*(.dtors)
     }
-    .text : { *(.text) }
-    .rodata : { *(.rodata) }
-    .data : { *(.data) }
+    .text : ALIGN(4K) { *(.text*) *(.eh_frame*) *(.tm_clone_table) }
+    . = ALIGN(4K);
+    __text_end__ = .;
+    __rodata_start__ = .;
+    .rodata : { *(.rodata*) }
+    . = ALIGN(4K);
+    __rodata_end__ = .;
+    __data_start__ = .;
+    .data : { *(.data*) }
+    . = ALIGN(4K);
+    __data_end__ = .;
+    __bss_start__ = .;
     .bss : { *(.bss COMMON) }
+    . = ALIGN(4K);
+    __bss_end__ = .;
 
     /DISCARD/ :
     {
         *(.comment)
         *(.note)
     }
-
-    /* Pad to KERNEL_MAX_SIZE */
-    . = KERNEL_VMA_BASE + KERNEL_MAX_SIZE;
-    __KERNEL_VMA_END__ = .;
-    __KERNEL_LMA_END__ = . - KERNEL_VMA_OFFSET;
 }

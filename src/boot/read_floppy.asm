@@ -4,16 +4,17 @@
 
 ; Read the `cx`-th floppy sector to `ebx` from drive `dl`
 ; with `si` sectors per track and `di` heads
+; clobbers: esi, edi
 global read_floppy_sector
 read_floppy_sector:
     push es
-    push ax
-    push cx
+    push eax
     push ebx
-    push dx
+    push ecx
+    push edx
 
-    mov ebp, esp
-    push ebp
+    mov byte [.drive], dl
+    mov dword [.buffer_address], ebx
 
     ; cl contains desired linear sector (LBA) - 1
     xor ch, ch
@@ -28,45 +29,48 @@ read_floppy_sector:
     inc dx
     ; DX contains the sector within the track we're in
     ; AX contains which track we're on
-
-    mov cl, dl
+    mov byte [.sector], dl
 
     ; cylinder = (track / number_of_heads)
     ; head     = (track % number_of_heads)
     xor dx, dx
     div di
-
     ; DX contains which head we're on
     ; AX contains which cylinder we're on
-
-    mov ch, al ; ch = cylinder 0xff
+    mov byte [.head], dl
+    mov byte [.cylinder], al
 
     shr ax, 2
     and al, 0xC0
-    or cl, al  ; cl = sector | ((cylinder >> 2) & 0xC0)
 
-    mov dh, dl ; dh = head
-
-    mov ax, word [ebp]
-    mov dl, al ; dl = drive_number
-
-    mov ebx, dword [ebp + 2] ; ebx = destination base
-
-    ; Set [es:bx] from ebx
-    set_segment_and_base es, bx, ebx
+    or al, byte [.sector] ; sector |= ((cylinder >> 2) & 0xC0)
+    mov byte [.sector], al
 
 .retry:
     mov al, 1 ; al => Total sector count
     mov ah, 2 ; ah => Read (2)
-    int 0x13
+    mov ch, byte [.cylinder]
+    mov cl, byte [.sector]
+    mov dh, byte [.head]
+    mov dl, byte [.drive]
+    mov ebx, dword [.buffer_address] 
+    set_segment_and_base es, bx, ebx ; Set [es:bx] from ebx
+    int 0x13 ; CF = error, AH = return code, AL = actual sectors read
     jc .retry
     test ah, ah
     jnz .retry
+    cmp al, 1
+    jne .retry
 
-    pop ebp
-    pop dx
+    pop edx
+    pop ecx
     pop ebx
-    pop cx
-    pop ax
+    pop eax
     pop es
     ret
+
+.cylinder: db 0
+.sector:   db 0
+.head:     db 0
+.drive:    db 0
+.buffer_address: dd 0

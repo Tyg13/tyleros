@@ -149,8 +149,7 @@ read_kernel_from_filesystem:
     pop bx
 
     ; Get cluster number of entry's first cluster
-    lea bx, [bx + ENTRY_FIRST_CLUSTER]
-    mov cx, word [bx]
+    mov cx, word [bx + ENTRY_FIRST_CLUSTER]
 
 .read_cluster:
     ; Store cluster number

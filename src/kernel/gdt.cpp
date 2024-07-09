@@ -1,9 +1,6 @@
 #include "gdt.h"
 
 #include "debug.h"
-#include "memory.h"
-
-#include "string.h"
 
 namespace gdt {
 

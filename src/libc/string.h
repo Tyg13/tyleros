@@ -7,17 +7,19 @@
 extern "C" {
 #endif
 
-volatile void * memcpy_v(volatile void * src, const volatile void * dst, size_t n);
-volatile void * memset_v(volatile void * dst, int c, size_t n);
-void * memcpy(void * src, const void * dst, size_t n);
-void * memset(void * dst, int c, size_t n);
+volatile void *memcpy_v(volatile void *src, const volatile void *dst, size_t n);
+volatile void *memset_v(volatile void *dst, int c, size_t n);
+void *memcpy(void *dst, const void *src, size_t n);
+void *memmove(void *dst, const void *src, size_t n);
+void *memset(void *dst, int c, size_t n);
 
-char * strchr(const char * str, int character);
-int    strcmp(const char * str1, const char * str2);
-char * strncpy(char * dst, const char * src, size_t n);
-char * strcpy(char * dst, const char * src);
+char *strchr(const char *str, int character);
+int strncmp(const char *str1, const char *str2, size_t n);
+int strcmp(const char *str1, const char *str2);
+char *strncpy(char *dst, const char *src, size_t n);
+char *strcpy(char *dst, const char *src);
 size_t strlen(const char *);
-char * strrev(char * src, int len);
+char *strrev(char *src, int len);
 
 #ifdef __cplusplus
 }

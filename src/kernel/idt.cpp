@@ -2,7 +2,6 @@
 
 #include "debug.h"
 #include "interrupts.h"
-#include "memory.h"
 #include "pic.h"
 
 namespace idt {
@@ -18,14 +17,12 @@ static void load_idt();
 void init() {
   remap_pic();
   load_idt();
-  debug::printf("idt: initialized\n");
-  // unmask_irq(1);
-  // asm volatile ("sti" ::: "memory", "cc");
+  debug::printf("idt: initialized at 0x%p\n", &g_idt);
 }
 
 void load_idt() {
   for (auto i = 0; i < (int)NUM_IDT_ENTRIES; ++i) {
-    const auto handler = reinterpret_cast<uintptr_t>(get_interrupt_handler(i));
+    const uintptr_t handler = interrupts::get_handler(i);
     g_idt[i] = {
         .offset_1 = (uint16_t)(handler),
         .selector = 0x8,

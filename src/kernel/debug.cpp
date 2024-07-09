@@ -1,6 +1,5 @@
 #include "debug.h"
 
-#include "io.h"
 #include "serial.h"
 #include "vga.h"
 
@@ -9,24 +8,13 @@
 
 namespace debug {
 
-static bool s_enabled = false;
-bool enabled() { return s_enabled; }
-
-bool try_to_enable() {
-  if (!serial::initialized()) {
-    return false;
-  }
-  s_enabled = true;
-  return true;
-}
-
 bool puts(const char *str) {
   if (str == nullptr)
     return false;
 
-  for (auto c = *str; c != '\0'; c = *++str) {
-    serial::send(serial::port::COM1, c);
-  }
+  for (auto s = str; *s != '\0'; ++s)
+    serial::send(serial::port::COM1, *s);
+  serial::send(serial::port::COM1, '\n');
 
   if (vga::initialized)
     vga::string::puts(str);
@@ -40,11 +28,27 @@ void printf(const char *fmt, ...) {
   va_list args;
   va_start(args, fmt);
 
-  vsnprintf(write_buffer, WRITE_BUFFER_SIZE, fmt, args);
+  char *str = write_buffer;
+  vsnprintf(str, WRITE_BUFFER_SIZE, fmt, args);
 
   va_end(args);
 
-  puts(write_buffer);
+  for (auto s = str; *s != '\0'; ++s)
+    serial::send(serial::port::COM1, *s);
+
+  if (vga::initialized)
+    vga::string::print(str);
 }
 
 } // namespace debug
+
+void debug_print(const char *str) {
+  if (str == nullptr)
+    return;
+
+  for (auto s = str; *s != '\0'; ++s)
+    serial::send(serial::port::COM1, *s);
+
+  if (vga::initialized)
+    vga::string::print(str);
+}

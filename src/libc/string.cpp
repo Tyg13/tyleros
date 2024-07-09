@@ -20,7 +20,7 @@ memcpy_impl(T *dst, const T *src, size_t n) {
   for (size_t i = 0; i < n; ++i) {
     *__dst++ = *__src++;
   }
-  return __dst;
+  return dst;
 }
 
 template <typename T>
@@ -31,7 +31,7 @@ __attribute__((always_inline)) static inline auto memset_impl(T *dst, int c,
   for (size_t i = 0; i < n; ++i) {
     *__dst++ = (char_type)c;
   }
-  return __dst;
+  return dst;
 };
 
 volatile void *memcpy_v(volatile void *dst, const volatile void *src,
@@ -47,6 +47,26 @@ void *memcpy(void *dst, const void *src, size_t n) {
   return memcpy_impl(dst, src, n);
 }
 
+void *memmove(void *dst, const void *src, size_t n) {
+  auto *__dst = (char*)dst;
+  const auto *__src = (const char*)src;
+  // If dst is behind src, copy forward:
+  //   dst: xxxxxxxx
+  //   src: ^  xxxxxxxxx
+  //         \_|   ^__|
+  if ((uintptr_t)dst < (uintptr_t)src)
+    for (unsigned i = 0; i < n; ++i)
+      __dst[i] = __src[i];
+  // If src is behind dst, copy backwards:
+  //   dst:    xxxxxxxx
+  //   src: xxxxxxxxx ^
+  //        |__^   |_/
+  else
+    for (unsigned i = n; i > 0; --i)
+      __dst[i - 1] = __src[i - 1];
+  return dst;
+}
+
 void *memset(void *dst, int c, size_t n) { return memset_impl(dst, c, n); }
 
 char *strchr(const char *str, int character) {
@@ -60,13 +80,26 @@ char *strchr(const char *str, int character) {
   return nullptr;
 }
 
-int strcmp(const char *str1, const char *str2) {
-  for (int i = 0; str1[i] != '\0' && str2[i] != '\0'; ++i) {
+int strncmp(const char *str1, const char *str2, size_t n) {
+  for (size_t i = 0; i < n; ++i) {
+    if (str1[i] == '\0' && str2[i] != '\0') {
+      return -1;
+    }
+    if (str2[i] == '\0' && str1[i] != '\0') {
+      return 1;
+    }
+    if (str2[i] == '\0' && str1[i] == '\0') {
+      return 0;
+    }
     if (str1[i] != str2[i]) {
-      return str1[i] > str2[i] ? -1 : 1;
+      return str1[i] < str2[i] ? -1 : 1;
     }
   }
   return 0;
+}
+
+int strcmp(const char *str1, const char *str2) {
+  return strncmp(str1, str2, SIZE_MAX);
 }
 
 char *strncpy(char *dst, const char *src, size_t n) {

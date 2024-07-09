@@ -7,16 +7,15 @@ ENTRIES_PER_TABLE equ 512
 SIZE_OF_ENTRY equ 0x8
 LOG2_SIZE_OF_ENTRY equ 3
 
-PREFIX_MASK equ ENTRIES_PER_TABLE - 1
-PML1_MASK   equ PREFIX_MASK << 12
-PML2_MASK   equ PREFIX_MASK << 21
-PML3_MASK   equ ~0 << 30
+PREFIX_MASK  equ ENTRIES_PER_TABLE - 1
+PML3_MASK_LO equ ~0 << 30     ; bottom 2 bits
+PML3_MASK_HI equ (1 << 7) - 1 ; top 7 bits
+PML4_MASK    equ PREFIX_MASK << 7
 
 PAGE_PRESENT equ (1 << 0)
 PAGE_WRITE   equ (1 << 1)
 PAGE_LARGE   equ (1 << 7)
 
-extern allocate_page
 extern vga_print
 
 global page_tables_start
@@ -26,34 +25,47 @@ page_tables_end: dd 0
 
 TRUE: dw 1
 
-; Map `ecx` contiguous pages, starting at physical `esi`, to virtual `edi`
+; Params:
+;    - esi: physical addr start (should be page-aligned)
+;    - edi: virtual addr start low (should be page-aligned)
+;    - ebx: virtual addr start hi
+;    - ecx: number of pages to map,
 global map_contiguous_pages
 map_contiguous_pages:
-    xchg bx, bx
     cmp ecx, ENTRIES_PER_TABLE
     jg .fail
 
     mov bp, sp ; create stack frame
-    sub sp, 6 * 4
+    sub sp, 5 * 4
 
     ; store initial offsets on the stack
+    shr edi, 12
     mov eax, edi
-    and eax, PML1_MASK
-    shr eax, 12
+    and eax, PREFIX_MASK
     shl eax, LOG2_SIZE_OF_ENTRY
     mov [bp - 1 * 4], eax ; <- pml1 offset (slot: 1)
 
+    shr edi, 9
     mov eax, edi
-    and eax, PML2_MASK
-    shr eax, 21
+    and eax, PREFIX_MASK
     shl eax, LOG2_SIZE_OF_ENTRY
     mov [bp - 2 * 4], eax ; <- pml2 offset (slot: 2)
 
+    shr edi, 9
     mov eax, edi
-    and eax, PML3_MASK
-    shr eax, 30
+    mov edx, ebx
+    and edx, (1 << 7) - 1
+    shl edx, 2
+    or eax, edx
     shl eax, LOG2_SIZE_OF_ENTRY
     mov [bp - 3 * 4], eax ; <- pml3 offset (slot: 3)
+
+    shr ebx, 7
+    mov eax, ebx
+    and eax, PML4_MASK
+    shr eax, 7
+    shl eax, LOG2_SIZE_OF_ENTRY
+    mov [bp - 4 * 4], eax ; pml4 offset (slot: 4)
 
     ; Check if PML4 table hasn't been allocated yet, if so allocate it
     xor ax, ax
@@ -64,18 +76,17 @@ map_contiguous_pages:
     ; ebx holds PML4 base
 
     ; Get PML4 entry (PML3 pointer)
-    ; assume PML4 offset is zero
+    add ebx, [bp - 4 * 4] ; PML4 offset
     call get_or_allocate_level ; ebx <- PML3 pointer
 
     ; Get PML3 entry (PML2 pointer)
     add ebx, [bp - 3 * 4] ; PML3 offset
     call get_or_allocate_level ; ebx <- PML2 pointer
-    mov [bp - 4 * 4], ebx ; (slot: 4) <- PML2 pointer
+    mov [bp - 5 * 4], ebx ; (slot: 6) <- PML2 pointer
 
     ; Get PML2 entry (PML1 pointer)
     add ebx, [bp - 2 * 4] ; PML2 offset
     call get_or_allocate_level ; ebx <- PML1 pointer
-    mov [bp - 5 * 4], ebx ; (slot: 5) <- PML1 pointer
 
     ; Get offset of first page to write
     add ebx, [bp - 1 * 4] ; PML1 offset
@@ -119,7 +130,7 @@ map_contiguous_pages:
 
     ; Write the table into PML2
     mov eax, [bp - 2 * 4] ; PML2 offset
-    mov edx, [bp - 4 * 4] ; PML2 pointer
+    mov edx, [bp - 5 * 4] ; PML2 pointer
     add edx, eax
     set_segment_and_base es, di, edx
     or ebx, PAGE_PRESENT | PAGE_WRITE

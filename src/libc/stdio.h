@@ -11,21 +11,27 @@ extern "C" {
 #define SEEK_SET 0
 
 typedef struct FILE {
-  int dummy;
+  int desc;
 } FILE;
+extern FILE *stdout;
+#define stdout stdout
 extern FILE *stderr;
 #define stderr stderr
 
 int fclose(FILE *);
 int fflush(FILE *);
 FILE *fopen(const char *, const char *);
-int fprintf(FILE *, const char *, ...);
+int printf(const char *, ...)
+    __attribute__((format(printf, 1, 2)));
+int vprintf(const char *, va_list args);
+int fprintf(FILE *, const char *, ...)
+    __attribute__((format(printf, 2, 3)));
+int vfprintf(FILE *, const char *, va_list);
 size_t fread(void *, size_t, size_t, FILE *);
 int fseek(FILE *, long, int);
 long ftell(FILE *);
 size_t fwrite(const void *, size_t, size_t, FILE *);
 void setbuf(FILE *, char *);
-int vfprintf(FILE *, const char *, va_list);
 
 int vsprintf(char *str, const char *fmt, va_list args);
 int sprintf(char *str, const char *fmt, ...)

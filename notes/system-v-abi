@@ -1,0 +1,8 @@
+At least for the x86-64 platform (which is all we care about), we have the following
+expectations:
+    - The stack grows downwards.
+    - Parameters: %rdi, %rsi, %rdx, %rcx, %r8, %r9, then stack (reverse order)
+    - Stack is 16-byte aligned before calls end
+    - Callee-saved: %rbx, %rsp, %rbp, %r12, %r13, %r14, %r15
+    - Caller-saved: %r10, %r11 (+ parameters)
+    - Return register: up to 64 bits in %rax; 64 bits in %rdx if return is 128-bit

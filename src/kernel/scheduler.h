@@ -1,13 +1,19 @@
 #ifndef SCHEDULER_H
 #define SCHEDULER_H
 
+#include "interrupts.h"
 #include <stdint.h>
+#include <utility>
 
 namespace scheduler {
 
 void init();
 
 using task = void(void *);
+
+struct alignas(16) fxsave_data {
+  char data[512];
+};
 
 struct task_frame {
   uint64_t r15;
@@ -33,31 +39,33 @@ struct task_frame {
 } __attribute__((packed));
 
 enum class task_state {
-  runnable,
-  sleeping,
+  runnable = 0,
   dead,
 };
 
 struct task_context {
   task_frame frame;
   task_state state;
+  uint8_t code;
+  char *stack_base;
 };
 
 void schedule_task(task *new_task, void *context);
-
-task_frame *task_switch(task_frame *tcb);
+template <typename F> void schedule_task(F &&f, void *context = nullptr) {
+  schedule_task(+std::forward<F>(f), context);
+}
 
 unsigned int get_current_task();
 
 void yield();
 [[noreturn]] void exit();
 
-extern "C" uint8_t should_task_switch;
+extern "C" bool task_switching_enabled;
 
 inline void enable_task_switch() {
-  asm volatile("cli" ::: "memory");
-  should_task_switch = 1;
-  asm volatile("sti" ::: "memory");
+  interrupts::disable();
+  task_switching_enabled = true;
+  interrupts::enable();
 }
 
 } // namespace scheduler
