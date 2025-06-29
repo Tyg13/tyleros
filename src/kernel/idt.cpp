@@ -1,8 +1,10 @@
 #include "idt.h"
 
-#include "debug.h"
+#include "gdt.h"
 #include "interrupts.h"
 #include "pic.h"
+
+#include <stdio.h>
 
 namespace idt {
 
@@ -12,20 +14,15 @@ using IDT = IDT_Entry[NUM_IDT_ENTRIES];
 static IDTR g_idtr;
 static IDT g_idt;
 
-static void load_idt();
-
 void init() {
-  remap_pic();
-  load_idt();
-  debug::printf("idt: initialized at 0x%p\n", &g_idt);
-}
+  pic::remap_interrupts();
 
-void load_idt() {
   for (auto i = 0; i < (int)NUM_IDT_ENTRIES; ++i) {
-    const uintptr_t handler = interrupts::get_handler(i);
+    const uintptr_t handler =
+        interrupts::get_handler(static_cast<unsigned char>(i));
     g_idt[i] = {
         .offset_1 = (uint16_t)(handler),
-        .selector = 0x8,
+        .selector = gdt::KERNEL_CODE_SELECTOR,
         .ist = 0,
         .type_attr = (uint8_t)IDT_Entry::Attr::present |
                      (uint8_t)IDT_Entry::Type::interrupt_32,
@@ -38,6 +35,8 @@ void load_idt() {
       .base = reinterpret_cast<uintptr_t>(&g_idt),
   };
 
-  asm volatile("lidt %0\n\t" ::"m"(g_idtr));
+  asm volatile("lidt %0" ::"m"(g_idtr));
+  printf("idt: initialized at 0x%p\n", &g_idt);
 }
+
 } // namespace idt

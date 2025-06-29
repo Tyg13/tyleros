@@ -1,6 +1,7 @@
 #ifndef FILESYSTEM_H
 #define FILESYSTEM_H
 
+#include "util/unique_ptr.h"
 #include <stdint.h>
 
 namespace fs {
@@ -69,13 +70,18 @@ struct directory_entry {
   uint16_t cluster_num_lo;
   uint32_t size;
 
-  static constexpr auto file_name_size = sizeof(short_file_full_name);
+  static constexpr auto file_full_name_size = sizeof(short_file_full_name);
+  static constexpr auto file_name_size = sizeof(short_file.name);
+  static constexpr auto file_extension_size = sizeof(short_file.extension);
 } __attribute__((packed));
 static_assert(sizeof(directory_entry) == 32);
 
 void init();
 
-void *read_file(const char *path);
+// Tries to read the contents of the file at `path` into an allocated buffer of
+// sufficient size. If reading the file fails, returns `nullptr`.
+kstd::unique_ptr<char> read_file(const char *path);
+
 void dump_dir(const char *path);
 
 } // namespace fs

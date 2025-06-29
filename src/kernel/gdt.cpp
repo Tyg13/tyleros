@@ -1,12 +1,14 @@
 #include "gdt.h"
 
+#include "alloc.h"
 #include "debug.h"
+#include "memory.h"
 
 namespace gdt {
 
 GDTR gdtr;
 
-alignas(0x4) GDT_Entry gdt[7];
+alignas(0x4) Entry gdt[7];
 
 constexpr static uint8_t GDT_PRESENT = 1 << 7;
 constexpr static uint8_t GDT_KERNEL_SEGMENT = 0 << 5;
@@ -18,6 +20,9 @@ constexpr static uint8_t GDT_CODE_CONFORMING = 1 << 2;
 constexpr static uint8_t GDT_DATA_WRITABLE = 1 << 1;
 constexpr static uint8_t GDT_CODE_READABLE = 1 << 1;
 constexpr static uint8_t GDT_ACCESSED = 1 << 0;
+
+constexpr static uint8_t TSS_TYPE_AVAILABLE = 0x9;
+constexpr static uint8_t TSS_TYPE_BUSY = 0xB;
 
 constexpr static uint8_t GDT_BYTE_GRANULARITY = 0 << 3;
 constexpr static uint8_t GDT_PAGE_GRANULARITY = 1 << 3;
@@ -49,7 +54,7 @@ static void init_tss();
 
 void init() {
   // Null descriptor
-  gdt[0] = GDT_Entry{{{
+  gdt[0] = Entry{{{
       .limit_lo = 0x0,
       .base_lo = 0x0,
       .base_hi_lo = 0x0,
@@ -59,7 +64,7 @@ void init() {
       .base_hi_hi = 0x0,
   }}};
   // Kernel code descriptor
-  gdt[1] = GDT_Entry{{{
+  gdt[KERNEL_CODE_SELECTOR_IDX] = Entry{{{
       .limit_lo = 0xFFFF,
       .base_lo = 0x0,
       .base_hi_lo = 0x0,
@@ -70,7 +75,7 @@ void init() {
       .base_hi_hi = 0x0,
   }}};
   // Kernel data descriptor
-  gdt[2] = GDT_Entry{{{
+  gdt[KERNEL_DATA_SELECTOR_IDX] = Entry{{{
       .limit_lo = 0xFFFF,
       .base_lo = 0x0,
       .base_hi_lo = 0x0,
@@ -81,31 +86,33 @@ void init() {
       .base_hi_hi = 0x0,
   }}};
   // User-space code descriptor
-  gdt[3] = GDT_Entry{{{
+  gdt[USER_CODE_SELECTOR_IDX] = Entry{{{
       .limit_lo = 0xFFFF,
       .base_lo = 0x0,
       .base_hi_lo = 0x0,
-      .access = GDT_PRESENT | GDT_NOT_TSS | GDT_EXECUTABLE | GDT_CODE_READABLE,
+      .access = GDT_PRESENT | GDT_USER_SEGMENT | GDT_NOT_TSS | GDT_EXECUTABLE |
+                GDT_CODE_READABLE,
       .limit_hi = 0xF,
       .flags = GDT_PAGE_GRANULARITY | GDT_64_BIT,
       .base_hi_hi = 0x0,
   }}};
   // User-space data descriptor
-  gdt[4] = GDT_Entry{{{
+  gdt[USER_DATA_SELECTOR_IDX] = Entry{{{
       .limit_lo = 0xFFFF,
       .base_lo = 0x0,
       .base_hi_lo = 0x0,
-      .access = GDT_PRESENT | GDT_NOT_TSS | GDT_DATA_WRITABLE,
+      .access =
+          GDT_PRESENT | GDT_USER_SEGMENT | GDT_NOT_TSS | GDT_DATA_WRITABLE,
       .limit_hi = 0xF,
       .flags = GDT_PAGE_GRANULARITY | GDT_64_BIT,
       .base_hi_hi = 0x0,
   }}};
   // Task State Segment
-  gdt[5] = GDT_Entry{{{
+  gdt[5] = Entry{{{
       .limit_lo = (uint16_t)(sizeof(tss_entry) & 0xFFFF),
       .base_lo = (uint16_t)((uintptr_t)&tss_entry & 0xFFFF),
       .base_hi_lo = (uint8_t)(((uintptr_t)&tss_entry >> 16) & 0xFF),
-      .access = GDT_PRESENT | GDT_EXECUTABLE | GDT_ACCESSED,
+      .access = GDT_PRESENT | TSS_TYPE_AVAILABLE,
       .limit_hi = (uint8_t)(sizeof(tss_entry) >> 16),
       .flags = GDT_64_BIT,
       .base_hi_hi = (uint8_t)(((uintptr_t)&tss_entry >> 24) & 0xFF),
@@ -121,12 +128,18 @@ void init() {
 
   asm volatile("" ::: "memory");
   asm volatile("lgdt %0" ::"m"(gdtr));
-  asm volatile("mov $0x2B, %%ax\t\r" ::"N"(0x2B));
+  asm volatile("mov %0, %%ax\t\r" ::"N"(5 * sizeof(Entry)));
   asm volatile("ltr %ax");
 
-  debug::printf("gdt: initialized at 0x%p\n", gdt);
+  printf("gdt: initialized at 0x%p\n", gdt);
 }
 
-void init_tss() { tss_entry = {0}; }
+alignas(
+    memory::PAGE_ALIGN.val) static unsigned char task_stack[memory::PAGE_SIZE];
+
+void init_tss() {
+  tss_entry = {0};
+  tss_entry.rsp0 = (uint64_t)(uintptr_t)&task_stack;
+}
 
 } // namespace gdt

@@ -1,5 +1,8 @@
 [BITS 16]
 
+; printing.asm
+extern vga_print
+
 MEMORY_MAP_ENTRY_BASE_LO   equ 0x0  ; dd
 MEMORY_MAP_ENTRY_BASE_HI   equ 0x4  ; dd
 MEMORY_MAP_ENTRY_LENGTH_LO equ 0x8  ; dd
@@ -25,8 +28,12 @@ detect_low_memory:
     ret
 
 .error:
+    mov bp, .error_msg
+    call vga_print
+
     hlt
     jmp $
+.error_msg: db "error detecting low memory!", 0
 
 global build_memory_map
 build_memory_map:

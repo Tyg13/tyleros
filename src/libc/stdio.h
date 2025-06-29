@@ -1,23 +1,32 @@
 #ifndef LIBC_STDIO_H
 #define LIBC_STDIO_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
+#include "./platform_specific.h"
 #include <stdarg.h>
 #include <stddef.h>
 
-#define SEEK_SET 0
-#define SEEK_END -1
+LIBC_NAMESPACE_BEGIN
 
-typedef struct FILE {
-  int desc;
-} FILE;
-extern FILE *stdout;
+#ifndef SEEK_SET
+#define SEEK_SET 0
+#endif
+#ifndef SEEK_END
+#define SEEK_END -1
+#endif
+#ifndef EOF
+#define EOF (int)-1
+#endif
+#ifndef stdout
 #define stdout stdout
-extern FILE *stderr;
+#endif
+#ifndef stderr
 #define stderr stderr
+#endif
+
+struct FILE;
+typedef struct FILE FILE;
+extern FILE *stdout;
+extern FILE *stderr;
 
 int fclose(FILE *);
 int fflush(FILE *);
@@ -36,6 +45,9 @@ int fprintf(FILE *, const char *, ...)
     __attribute__((format(printf, 2, 3)));
 int vfprintf(FILE *, const char *, va_list);
 
+int fputs(const char *str, FILE *stream);
+int puts(const char *str);
+
 void setbuf(FILE *, char *);
 
 int vsprintf(char *str, const char *fmt, va_list args);
@@ -47,8 +59,6 @@ int snprintf(char *str, size_t buf_size, const char *fmt, ...)
 
 void perror(const char *);
 
-#ifdef __cplusplus
-}
-#endif
+LIBC_NAMESPACE_END
 
 #endif

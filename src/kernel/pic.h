@@ -1,18 +1,7 @@
 #ifndef PIC_H
 #define PIC_H
 
-#include "util/io.h"
-
-constexpr static uint8_t PIC1_COMMAND = 0x20;
-constexpr static uint8_t PIC1_DATA = 0x21;
-constexpr static uint8_t PIC2_COMMAND = 0xA0;
-constexpr static uint8_t PIC2_DATA = 0xA1;
-
-constexpr static uint8_t END_OF_INTERRUPT = 0x20;
-
-void remap_pic();
-
-enum class irq: int {
+enum class irq : int {
   PIT = 0,
   KEYBOARD = 1,
   CASCADE = 2,
@@ -31,9 +20,15 @@ enum class irq: int {
   SECONDARY_ATA = 15,
 };
 
+namespace pic {
+
+void remap_interrupts();
+
 void mask_irq(irq code);
 void unmask_irq(irq code);
-
 bool irq_is_masked(irq code);
+
+void signal_end_of_interrupt(irq code);
+} // namespace pic
 
 #endif

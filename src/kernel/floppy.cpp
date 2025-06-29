@@ -1,11 +1,10 @@
 #include "floppy.h"
 
-#include "cmos.h"
-#include "debug.h"
 #include "dma.h"
 #include "low_memory_allocator.h"
-#include "memory.h"
+#include "panic.h"
 #include "pic.h"
+#include "timing.h"
 #include "util.h"
 #include "util/io.h"
 
@@ -16,52 +15,62 @@ constexpr static auto MT = 1 << 7;
 constexpr static auto MFM = 1 << 6;
 
 constexpr static auto COMMAND_SPECIFY = 0x03;
-constexpr static auto COMMAND_UNLOCK = 0x04;
 constexpr static auto COMMAND_WRITE = 0x05;
 constexpr static auto COMMAND_READ = 0x06;
 constexpr static auto COMMAND_RECALIBRATE = 0x07;
 constexpr static auto COMMAND_SENSE_INTERRUPT = 0x08;
+constexpr static auto COMMAND_SEEK = 0x0F;
 constexpr static auto COMMAND_VERSION = 0x10;
 constexpr static auto COMMAND_CONFIGURE = 0x13;
+constexpr static auto COMMAND_UNLOCK = 0x14;
+constexpr static auto COMMAND_LOCK = COMMAND_UNLOCK | MT;
 
-constexpr static uint16_t DIGITAL_OUTPUT_REGISTER = 0x3F2;
-constexpr static uint16_t MAIN_STATUS_REGISTER = 0x3F4;
-constexpr static uint16_t DATA_FIFO = 0x3F5;
-constexpr static uint16_t CONFIGURATION_CONTROL_REGISTER = 0x3F7;
+constexpr static io::port<io::readwrite> DIGITAL_OUTPUT_REGISTER{0x3F2};
+constexpr static io::port<io::read> MAIN_STATUS_REGISTER{0x3F4};
+constexpr static io::port<io::write> DATARATE_SELECT_REGISTER{0x3F4};
+constexpr static io::port<io::readwrite> DATA_FIFO{0x3F5};
+constexpr static io::port<io::read> DIGITAL_INPUT_REGISTER{0x3F7};
+constexpr static io::port<io::write> CONFIGURATION_CONTROL_REGISTER{0x3F7};
 
-constexpr static auto STATUS_RQM = 1 << 7;
-constexpr static auto STATUS_DIO = 1 << 6;
-constexpr static auto STATUS_CMD_BSY = 1 << 4;
-constexpr static auto STATUS_ACTA = 1 << 0;
+constexpr static auto MSR_RQM = 1 << 7;
+constexpr static auto MSR_DIO = 1 << 6;
+constexpr static auto MSR_CMD_BSY = 1 << 4;
+
+// If set, controller is in reset mode.
+constexpr static auto DOR_RESET = 1 << 2;
+// If set, IRQs and DMA are enabled.
+constexpr static auto DOR_IRQ = 1 << 3;
+// When set, drive 0's motor is enabled.
+constexpr static auto DOR_MOTA = 1 << 4;
+// When set, drive 1's motor is enabled.
+constexpr static auto DOR_MOTB = 1 << 5;
+// When set, drive 2's motor is enabled.
+constexpr static auto DOR_MOTC = 1 << 6;
+// When set, drive 3's motor is enabled.
+constexpr static auto DOR_MOTD = 1 << 7;
 
 uint8_t g_drive_number = 0;
 
 volatile bool disk_interrupt_handled = false;
+void handle_floppy_interrupt() {
+  disk_interrupt_handled = true;
+}
+
 static void wait_for_disk_interrupt() {
-  assert(!irq_is_masked(irq::FLOPPY) &&
+  assert(!pic::irq_is_masked(irq::FLOPPY) &&
          "floppy interrupt was not enabled, can't wait for disk interrupt!");
   SPIN_UNTIL(disk_interrupt_handled);
   disk_interrupt_handled = false;
 }
 
-[[noreturn]] static void fail(const char *message) {
-  kstd::panic("Error initializing floppy: %s", message);
-}
-
-static void fail_if(bool val, const char *message = "") {
-  if (val) {
-    fail(message);
-  }
-}
-
 static void wait_til_fifo_ready() {
-  SPIN_UNTIL((io::inb(MAIN_STATUS_REGISTER)&STATUS_RQM) != 0);
+  SPIN_UNTIL((io::inb(MAIN_STATUS_REGISTER)&MSR_RQM) != 0);
 }
 
 const bool issue_parameter_command(uint8_t param) {
   wait_til_fifo_ready();
 
-  if ((io::inb(MAIN_STATUS_REGISTER)&STATUS_DIO) == 0) {
+  if ((io::inb(MAIN_STATUS_REGISTER) & MSR_DIO) == 0) {
     io::outb(DATA_FIFO, param);
     return true;
   }
@@ -73,7 +82,7 @@ auto issue_command_with_result(uint16_t command, uint8_t (*result)[N],
                                Args &&...args) {
   for (int retries = 5; retries > 0; --retries) {
     uint8_t status = io::inb(MAIN_STATUS_REGISTER);
-    if ((status & STATUS_RQM) == 0 || (status & STATUS_DIO) != 0) {
+    if ((status & MSR_RQM) == 0 || (status & MSR_DIO) != 0) {
       continue;
     }
 
@@ -93,8 +102,8 @@ auto issue_command_with_result(uint16_t command, uint8_t (*result)[N],
       wait_til_fifo_ready();
 
       auto result_index = size_t{0};
-      while ((status = io::inb(MAIN_STATUS_REGISTER)&STATUS_DIO)) {
-        fail_if(result_index >= N, "Result buffer not large enough!");
+      while ((status = io::inb(MAIN_STATUS_REGISTER) & MSR_DIO)) {
+        assert(result_index < N && "Result buffer not large enough!");
         (*result)[result_index++] = io::inb(DATA_FIFO);
       }
     }
@@ -102,18 +111,25 @@ auto issue_command_with_result(uint16_t command, uint8_t (*result)[N],
     wait_til_fifo_ready();
 
     status = io::inb(MAIN_STATUS_REGISTER);
-    if ((status & STATUS_RQM) != 0 && (status & STATUS_DIO) == 0 &&
-        (status & STATUS_CMD_BSY) == 0) {
+    if ((status & MSR_RQM) != 0 && (status & MSR_DIO) == 0 &&
+        (status & MSR_CMD_BSY) == 0) {
       // Command succeeded, we can stop retrying
       return;
     }
   }
-  debug::printf("command=%x\n", (int32_t)command);
-  fail("ran out of tries issuing floppy command");
+  printf("command=%x\n", (int32_t)command);
+  assert(false && "ran out of tries issuing floppy command");
 }
 
-auto issue_command(uint16_t command, const auto... args) {
-  return issue_command_with_result<sizeof...(args)>(command, nullptr, args...);
+template <typename... Args>
+auto issue_command_with_result(uint16_t command, uint8_t *result,
+                               const Args ...args) {
+  return issue_command_with_result(command, (uint8_t(*)[1])result, args...);
+}
+
+template <typename... Args>
+auto issue_command(uint16_t command, const Args... args) {
+  return issue_command_with_result<1>(command, nullptr, args...);
 };
 
 void init_floppy_driver(uint8_t drive_number) {
@@ -121,10 +137,9 @@ void init_floppy_driver(uint8_t drive_number) {
 
   // Send version command, verify result is 0x90
   {
-    uint8_t result[1];
-    issue_command_with_result(COMMAND_VERSION, &result);
-    uint8_t version = result[0];
-    fail_if(version != 0x90);
+    uint8_t version;
+    issue_command_with_result(COMMAND_VERSION, &version);
+    assert(version == 0x90 && "invalid floppy version!");
   }
 
   // Configure controller to polling off, FIFO on,
@@ -138,16 +153,17 @@ void init_floppy_driver(uint8_t drive_number) {
   // Lock controller configuration
   {
     uint8_t result[1];
-    issue_command_with_result(COMMAND_UNLOCK | MT, &result);
+    issue_command_with_result(COMMAND_LOCK, &result);
+    const auto is_locked = (bool)(result[0] >> 4);
+    assert(is_locked && "controller couldn't be locked!");
   }
 
   // Reset controller
+  pic::unmask_irq(irq::FLOPPY);
   const auto orig_dor_value = io::inb(DIGITAL_OUTPUT_REGISTER);
   io::outb(DIGITAL_OUTPUT_REGISTER, 0);
-  sleep(4);
+  busy_sleep(4_us);
   io::outb(DIGITAL_OUTPUT_REGISTER, orig_dor_value);
-
-  unmask_irq(irq::FLOPPY);
   wait_for_disk_interrupt();
 
   // Recalibrate the drive
@@ -156,19 +172,24 @@ void init_floppy_driver(uint8_t drive_number) {
   const auto hlt = 5;
   const auto hut = 0;
   issue_command(COMMAND_SPECIFY, srt << 4 | hut, hlt << 1);
-  io::outb(DIGITAL_OUTPUT_REGISTER, 1 << 4 | 1 << 3 | 1 << 2 | 0);
 
-  issue_command(COMMAND_RECALIBRATE, 0);
+  assert(drive_number < 4 && "invalid floppy drive number!");
+  constexpr static int enable_drive_motor[4] = {DOR_MOTA, DOR_MOTB, DOR_MOTC, DOR_MOTD};
+  io::outb(DIGITAL_OUTPUT_REGISTER, enable_drive_motor[drive_number] | DOR_IRQ |
+                                        DOR_RESET | drive_number);
+  busy_sleep(4_us);
+
+  issue_command(COMMAND_RECALIBRATE, drive_number);
   {
     uint8_t result[2];
     issue_command_with_result(COMMAND_SENSE_INTERRUPT, &result);
-    uint8_t st0 = result[0] & 0xFF;
-    fail_if((st0 & 0x20) == 0);
+    uint8_t st0 = result[0];
+    assert((st0 & 0x20) != 0);
   }
 
-  void *floppy_dma_buffer = low_memory::allocate(memory::PAGE_SIZE);
+  void *floppy_dma_buffer = low_memory::allocate(FLOPPY_BUFFER_SIZE);
   dma::set_buffer_for_channel(dma::FLOPPY_CHANNEL, floppy_dma_buffer,
-                              memory::PAGE_SIZE);
+                              FLOPPY_BUFFER_SIZE);
 }
 
 constexpr static auto SECTORS_PER_HEAD = 18;
@@ -189,15 +210,16 @@ static auto lba_to_chs(int sector) {
   };
 }
 
-constexpr static auto BYTES_PER_SECTOR = 0x100;
-
 floppy_status read_floppy(void *buffer, int lba, int sector_count) {
+  const auto [cylinder, head, sector] = lba_to_chs(lba);
+  fprintf(stderr,
+          "reading %d sector(s) from lba %d (%d C, %d H, %d S) to %p... ",
+          sector_count, lba, cylinder, head, sector, buffer);
   const auto transfer_size = BYTES_PER_SECTOR * sector_count;
   const void *dma_buffer = dma::prepare_transfer(
       dma::FLOPPY_CHANNEL, transfer_size, dma::mode::read);
 
-  const auto [cylinder, head, sector] = lba_to_chs(lba);
-  const auto end_of_track = (lba / SECTORS_PER_HEAD + 1) * SECTORS_PER_HEAD;
+  const auto end_of_track = 18;
 
   uint8_t result[7] = {0};
   issue_command_with_result(COMMAND_READ | MFM | MT, &result,
@@ -207,16 +229,38 @@ floppy_status read_floppy(void *buffer, int lba, int sector_count) {
   uint8_t st0 = result[0];
   if ((st0 & 0xC0) != 0) {
     uint8_t st1 = result[1];
-    if ((st1 & 0x80) != 0)
-      return floppy_status::too_few_sectors;
-    if ((st1 & 0x10) != 0)
-      return floppy_status::driver_too_slow;
-    if ((st1 & 0x2) != 0)
-      return floppy_status::media_write_protected;
+    if ((st1 & 0x80) != 0) {
+      fprintf(stderr, " FAILED: end of cylinder (tried to access sector beyond "
+                      "final sector of track)\n");
+      return floppy_status::end_of_cylinder;
+    }
+    if ((st1 & 0x20) != 0) {
+      fprintf(stderr, " FAILED: data failed crc check\n");
+      return floppy_status::data_error;
+    }
+    if ((st1 & 0x10) != 0) {
+      fprintf(stderr, " FAILED: did not receive DMA service within the "
+                      "required time interval; data underrun/overrun\n");
+      return floppy_status::overrun_underrun;
+    }
+    if ((st1 & 0x4) != 0) {
+      fprintf(stderr, " FAILED: could not find the specified sector\n");
+      return floppy_status::no_data;
+    }
+    if ((st1 & 0x2) != 0) {
+      fprintf(stderr, " FAILED: media write-protected\n");
+      return floppy_status::not_writable;
+    }
+    if ((st1 & 0x1) != 0) {
+      fprintf(stderr, " FAILED: missing address mark\n");
+      return floppy_status::missing_address_mark;
+    }
+    fprintf(stderr, " FAILED: unknown error\n");
     return floppy_status::error_unknown;
   }
 
   memcpy(buffer, dma_buffer, transfer_size);
+  fprintf(stderr, " OK\n");
   return floppy_status::ok;
 }
 
@@ -224,13 +268,7 @@ void read_floppy_or_fail(void *buffer, int lba, int sector_count) {
   switch (read_floppy(buffer, lba, sector_count)) {
   case floppy_status::ok:
     return;
-  case floppy_status::too_few_sectors:
-    kstd::panic("too few sectors for floppy read!");
-  case floppy_status::driver_too_slow:
-    kstd::panic("floppy driver too slow!");
-  case floppy_status::media_write_protected:
-    kstd::panic("floppy media is write protected!");
-  case floppy_status::error_unknown:
-    kstd::panic("unknown error trying to read floppy!");
+  default:
+    kstd::panic("error reading floppy!");
   }
 }

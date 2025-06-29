@@ -12,7 +12,7 @@ struct buffer {
 
 enum class mode { read, write };
 constexpr static auto FLOPPY_CHANNEL = 2;
-void *prepare_transfer(int channel, uint16_t transfer_size, mode mode);
+void *prepare_transfer(int channel, unsigned transfer_size, mode mode);
 
 void set_buffer_for_channel(int channel, void *data, size_t size);
 buffer *buffer_for_channel(int channel);

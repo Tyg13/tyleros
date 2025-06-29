@@ -1,5 +1,6 @@
 #include "low_memory_allocator.h"
-#include "debug.h"
+
+#include "panic.h"
 
 #include <assert.h>
 #include <string.h>
@@ -26,9 +27,9 @@ void init(uintptr_t low_mem_start, uintptr_t low_mem_end) {
   //     (avail_low_mem_end - (avail_low_mem_start + size_of_page_bitmap)) /
   //     memory::PAGE_SIZE;
   //*page_bitmap = kstd::intrusive_bitmap{avail_low_mem_pages};
-  debug::printf("Low memory allocator init : %lx bytes at 0x%p - 0x%p\n",
-                (avail_low_mem_end - avail_low_mem_start),
-                (void *)avail_low_mem_start, (void *)avail_low_mem_end);
+  fprintf(stderr, "Low memory allocator init : %lx bytes at 0x%p - 0x%p\n",
+          (avail_low_mem_end - avail_low_mem_start),
+          (void *)avail_low_mem_start, (void *)avail_low_mem_end);
 }
 
 void *allocate(size_t size, kstd::Align align) {

@@ -1,34 +1,39 @@
 #include "elf.h"
+#include "filesystem.h"
+#include "memory.h"
 
-#include "debug.h"
-#include "low_memory_allocator.h"
-
+#include <assert.h>
+#include <stdio.h>
 #include <string.h>
 
 namespace elf {
 
-static header *KERNEL_ELF_HEADER = nullptr;
+static header *KERNEL_ELF_HEADER;
 
 header &kernel_header() {
   return *KERNEL_ELF_HEADER;
 }
 
-void init(uintptr_t kernel_physical_start, uintptr_t kernel_physical_end) {
-  const header &in_header = *(const elf::header *)kernel_physical_start;
-  header *kernel = KERNEL_ELF_HEADER;
-  kernel = low_memory::allocate<header>();
-  *kernel = in_header;
+void init() {
+  //KERNEL_ELF_HEADER =
+  //    reinterpret_cast<header *>(fs::read_file("/kernel.sym").release());
+  //assert(strncmp((char *)KERNEL_ELF_HEADER->magic, "\177ELF", 4) == 0 &&
+  //       "loading kernel symbol tables failed!");
+  //assert(KERNEL_ELF_HEADER->size_of_section_header_table_entry ==
+  //           sizeof(section) &&
+  //       "ELF section size mismatch!");
 
-  // faults if low memory containing the kernel physical start/end are unmapped
-  memcpy(kernel->sections(), in_header.sections(), in_header.sections_size());
-  memcpy(kernel->section_name_string_table(),
-         in_header.section_name_string_table(), in_header.string_table_size());
-  debug::printf("ELF: loaded header   at 0x%p\n", &kernel);
-  debug::printf("ELF: loaded sections at 0x%p - 0x%zx\n", kernel->sections(),
-                (uintptr_t)kernel->sections() + kernel->sections_size());
-  debug::printf("ELF: loaded strings  at 0x%p - 0x%zx\n",
-                kernel->section_name_string_table(),
-                (uintptr_t)kernel->section_name_string_table() +
-                    kernel->string_table_size());
+  //printf("ELF: loaded header   at 0x%p\n", &KERNEL_ELF_HEADER);
+  //printf("ELF: loaded sections at 0x%p - 0x%p\n",
+  //       KERNEL_ELF_HEADER->sections().begin(),
+  //       KERNEL_ELF_HEADER->sections().end());
+  //printf("ELF: loaded strings  at 0x%p - 0x%zx\n",
+  //       KERNEL_ELF_HEADER->section_name_string_table(),
+  //       (uintptr_t)KERNEL_ELF_HEADER->section_name_string_table() +
+  //           KERNEL_ELF_HEADER->string_table_size());
+  //for (const section &s : KERNEL_ELF_HEADER->sections()) {
+  //  printf("ELF: section '%s' at %p\n", KERNEL_ELF_HEADER->section_name(s),
+  //         (char *)memory::KERNEL_VMA_START + s.offset);
+  //}
 }
 } // namespace elf

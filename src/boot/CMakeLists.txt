@@ -8,11 +8,12 @@ endmacro()
 add_executable(stage1.elf stage1.asm utils.asm)
 target_include_directories(stage1.elf PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 add_stage_linker_opts(stage1)
-add_custom_target(generate_stage1.bin
-    COMMAND "${CMAKE_OBJCOPY}" -O binary "$<TARGET_FILE:stage1.elf>" stage1.bin
-    DEPENDS stage1.elf
-    BYPRODUCTS stage1.bin
-    WORKING_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+add_custom_command(
+    OUTPUT ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/stage1.bin
+    COMMAND "${CMAKE_OBJCOPY}" -O binary "$<TARGET_FILE:stage1.elf>" ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/stage1.bin
+    DEPENDS stage1.elf)
+add_custom_target(generate_stage1.bin ALL
+    DEPENDS ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/stage1.bin)
 
 add_executable(stage2.elf
     a20.asm
@@ -28,25 +29,28 @@ add_executable(stage2.elf
 target_include_directories(stage2.elf PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
 add_stage_linker_opts(stage2)
-add_custom_target(generate_stage2.bin
-    COMMAND "${CMAKE_OBJCOPY}" -O binary "$<TARGET_FILE:stage2.elf>" stage2.bin
-    DEPENDS stage2.elf
-    BYPRODUCTS stage2.bin
-    WORKING_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+add_custom_command(
+    OUTPUT ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/stage2.bin
+    COMMAND "${CMAKE_OBJCOPY}" -O binary "$<TARGET_FILE:stage2.elf>" ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/stage2.bin
+    DEPENDS stage2.elf)
+add_custom_target(generate_stage2.bin ALL
+    DEPENDS ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/stage2.bin)
 
-add_custom_command(OUTPUT compute_crc32
-    COMMAND ${HOST_C_COMPILER} -o compute_crc32
-      ${CMAKE_CURRENT_SOURCE_DIR}/compute_crc32.c
-      ${CMAKE_CURRENT_SOURCE_DIR}/../kernel/crc32.c 
-    BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/compute_crc32
+add_custom_command(
+    OUTPUT compute_crc32
+    COMMAND ${HOST_CXX_COMPILER} -o compute_crc32 -O3
+      ${CMAKE_CURRENT_SOURCE_DIR}/compute_crc32.cpp
+      ${CMAKE_CURRENT_SOURCE_DIR}/../kernel/crc32.cpp
     DEPENDS
-      ${CMAKE_CURRENT_SOURCE_DIR}/../kernel/crc32.c 
-      ${CMAKE_CURRENT_SOURCE_DIR}/compute_crc32.c)
-add_custom_target(generate_kernel.crc32
+      ${CMAKE_CURRENT_SOURCE_DIR}/../kernel/crc32.cpp
+      ${CMAKE_CURRENT_SOURCE_DIR}/compute_crc32.cpp)
+add_custom_command(
+    OUTPUT ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/kernel.crc32
     COMMAND ./compute_crc32
       ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/kernel.bin
       ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/kernel.crc32
-    BYPRODUCTS ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/kernel.crc32
-    DEPENDS generate_kernel.bin ${CMAKE_CURRENT_BINARY_DIR}/compute_crc32)
+    DEPENDS
+      ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/kernel.bin
+      ${CMAKE_CURRENT_BINARY_DIR}/compute_crc32)
 set_source_files_properties(stage2.asm OBJECT_DEPENDS
     ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/kernel.crc32)

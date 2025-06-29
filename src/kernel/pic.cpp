@@ -2,17 +2,25 @@
 
 #include "util/io.h"
 
+namespace pic {
+constexpr static io::port<io::write> PIC1_COMMAND{0x20};
+constexpr static io::port<io::write> PIC2_COMMAND{0xA0};
+constexpr static io::port<io::readwrite> PIC1_DATA{0x21};
+constexpr static io::port<io::readwrite> PIC2_DATA{0xA1};
+
+constexpr static uint8_t END_OF_INTERRUPT = 0x20;
+
 constexpr static uint8_t ICW1_ICW4 = 1 << 0;
 constexpr static uint8_t ICW1_INIT = 1 << 4;
 
 constexpr static uint8_t ICW4_8086 = 1 << 0;
 
-void remap_pic() {
+void remap_interrupts() {
   // The master and slave PICs are configured by default to use IVT offsets
   // 0x08 to 0x0F and 0x70 to 0x7F, respectively. However, in protected mode,
-  // these offsets clash with interrupts triggered by processor exceptions.
-  // So this code initializes the PIC and remaps the controllers to usable
-  // offsets
+  // these offsets clash with interrupts triggered by processor exceptions
+  // (which use IVT offsets 0x0 - 0x1F). So this code initializes the PIC and
+  // remaps the controllers to usable offsets
 
   const auto pic1_value = io::inb(PIC1_DATA);
   const auto pic2_value = io::inb(PIC2_DATA);
@@ -75,5 +83,13 @@ bool irq_is_masked(irq code) {
   const auto irq = (int)code;
   const auto port = irq < 8 ? PIC1_DATA : PIC2_DATA;
   const auto mask = irq < 8 ? (1 << irq) : (1 << (irq - 8));
-  return (io::inb(port)&mask) != 0;
+  return (io::inb(port) & mask) != 0;
 }
+
+void signal_end_of_interrupt(irq code) {
+  const bool is_slave_irq = (int)code >= 8;
+  io::outb(PIC1_COMMAND, END_OF_INTERRUPT);
+  if (is_slave_irq)
+    io::outb(PIC2_COMMAND, END_OF_INTERRUPT);
+}
+} // namespace pic

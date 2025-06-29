@@ -14,8 +14,8 @@ template <typename Alloc> struct allocator {
     return (T *)Alloc::allocate(sizeof(T) * n, A);
   }
   template <typename T, kstd::Align A = kstd::align_of<T>>
-  static void free(T *) {
-    Alloc::deallocate(sizeof(T), A);
+  static void free(T *p) {
+    Alloc::deallocate(p, A);
   }
 };
 } // namespace kstd

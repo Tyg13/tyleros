@@ -7,7 +7,7 @@ load_elf_binary:
     ; Check for magic number
     mov eax, [rsi]
     cmp eax, ELF_MAGIC
-    jne .end
+    jne .error
 
     push rsi            ; Store start of binary
 .load_program_headers:
@@ -52,5 +52,9 @@ load_elf_binary:
     ; Return address for bootloader to jump to
     mov rax, [rsi + 0x18] ; Program entry position
     ret
+
+.error:
+    hlt
+    jmp .error
 
 ELF_MAGIC equ `\x7fELF`

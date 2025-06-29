@@ -3,10 +3,11 @@
 extern _init, _fini, kmain
 extern __bss_start__, __bss_end__
 
+boot_info: dq 0
+
 global _start
 _start:
-    and rsp, -16 ; 16-byte align the stack if it wasn't already
-    push rdi ; rdi contains the addr of our boot_info
+    mov qword [boot_info], rdi
 
     ; Zero out bss segment in anticipation of global ctors running
     lea rdi, [__bss_start__]
@@ -28,9 +29,10 @@ _start:
     or ax, CR4.OSFXSR | CR4.OSXMMEXCPT
     mov cr4, rax
 
+    and rsp, -16 ; 16-byte align the stack if it wasn't already
     call _init
 
-    pop rdi ; kmain(boot_info*)
+    mov rdi, qword [boot_info]
     call kmain
 
     call _fini

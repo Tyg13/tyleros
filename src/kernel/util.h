@@ -1,12 +1,12 @@
 #ifndef UTIL_H
 #define UTIL_H
-#include "algorithm.h"
+#include "util/algorithm.h"
 
 #include <bit>
 #include <cpuid.h>
-#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <utility>
 
 namespace kstd {
 struct Align {
@@ -14,12 +14,13 @@ struct Align {
 
   constexpr Align() = default;
   constexpr explicit Align(repr_type val) : val{val} {}
+  constexpr operator repr_type() const { return val; }
 
   repr_type val = 1;
 };
 
 inline constexpr uint64_t align_to(uint64_t val, Align align) {
-  return (val + align.val - 1) / align.val * align.val;
+  return (val + align.val - 1) / (uint64_t)align.val * (uint64_t)align.val;
 }
 
 template <typename T> constexpr inline Align align_of = Align{alignof(T)};
@@ -32,21 +33,21 @@ template <typename T> constexpr int log2_floor(T v) {
   return std::bit_width(v) - 1;
 }
 
+inline int64_t sign_extend(uint64_t v, unsigned num_source_bits) {
+  return int64_t(v << (64 - num_source_bits)) >> (64 - num_source_bits);
+}
+
 #define SPIN_WHILE(x)                                                          \
   do {                                                                         \
     asm volatile("pause");                                                     \
   } while (x)
 #define SPIN_UNTIL(x) SPIN_WHILE(!(x))
+#define SPIN_FOREVER()                                                         \
+  do {                                                                         \
+    SPIN_WHILE(true);                                                          \
+    __builtin_unreachable();                                                   \
+  } while (0)
 
-[[noreturn]] inline void panic(const char *msg, ...) {
-  va_list args;
-  va_start(args, msg);
-  vfprintf(stderr, msg, args);
-  va_end(args);
-  asm volatile("hlt");
-loop:
-  goto loop;
-}
 } // namespace kstd
 
 struct cpuid_info {

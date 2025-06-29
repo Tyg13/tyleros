@@ -9,7 +9,7 @@ struct GDTR {
   uintptr_t base;
 } __attribute__((packed));
 
-struct GDT_Entry {
+struct Entry {
   union {
     struct {
       uint16_t limit_lo;
@@ -23,6 +23,19 @@ struct GDT_Entry {
     uint32_t tss_high;
   };
 } __attribute__((packed));
+
+static constexpr auto KERNEL_CODE_SELECTOR_IDX = 1;
+static constexpr auto KERNEL_DATA_SELECTOR_IDX = 2;
+static constexpr auto USER_CODE_SELECTOR_IDX = 3;
+static constexpr auto USER_DATA_SELECTOR_IDX = 4;
+static constexpr auto KERNEL_CODE_SELECTOR =
+    KERNEL_CODE_SELECTOR_IDX * sizeof(Entry);
+static constexpr auto KERNEL_DATA_SELECTOR =
+    KERNEL_DATA_SELECTOR_IDX * sizeof(Entry);
+static constexpr auto USER_CODE_SELECTOR =
+    USER_CODE_SELECTOR_IDX * sizeof(Entry);
+static constexpr auto USER_DATA_SELECTOR =
+    USER_DATA_SELECTOR_IDX * sizeof(Entry);
 
 void init();
 } // namespace gdt

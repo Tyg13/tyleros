@@ -1,7 +1,10 @@
 #include "serial.h"
 
-#include "debug.h"
-#include "io.h"
+#include "util/io.h"
+
+#include <stdio.h>
+
+namespace serial {
 
 // clang-format off
 namespace Interrupts {
@@ -52,35 +55,32 @@ namespace ModemControl {
     constexpr auto AUX_OUTPUT_2       = 0b0000'1000;
 }
 
-constexpr auto DATA            = [](auto&& port) { return port + 0; };
-constexpr auto BAUD_DIVISOR_LO = [](auto&& port) { return port + 0; };
-constexpr auto BAUD_DIVISOR_HI = [](auto&& port) { return port + 1; };
-constexpr auto INTERRUPTS      = [](auto&& port) { return port + 1; };
-constexpr auto FIFO_CONTROL    = [](auto&& port) { return port + 2; };
-constexpr auto LINE_CONTROL    = [](auto&& port) { return port + 3; };
-constexpr auto MODEM_CONTROL   = [](auto&& port) { return port + 4; };
-constexpr auto LINE_STATUS     = [](auto&& port) { return port + 5; };
-
 // clang-format on
+#define DEF_PORT(NAME, MODE, IDX)                                              \
+  constexpr auto NAME = [](uint16_t port) {                                    \
+    return io::port<MODE>{(uint16_t)(port + IDX)};                             \
+  };
 
-namespace serial {
-
-static void init_port(uint16_t port);
+// port for reading/writing data from the buffer
+DEF_PORT(DATA, io::readwrite, 0);
+// with DATA_LATCH_ACCESS_BIT set, this sets the least significant value of the
+// baud divisor value (for setting baud rate)
+DEF_PORT(BAUD_DIVISOR_LO, io::write, 0);
+// with DATA_LATCH_ACCESS_BIT set, this sets the most significant value of the
+// baud divisor value (for setting baud rate)
+DEF_PORT(BAUD_DIVISOR_HI, io::write, 1);
+// controls whether interrupts are enabled
+DEF_PORT(INTERRUPT_ENABLE, io::readwrite, 1);
+DEF_PORT(FIFO_CONTROL, io::write, 2);
+DEF_PORT(LINE_CONTROL, io::readwrite, 3);
+DEF_PORT(MODEM_CONTROL, io::readwrite, 4);
+DEF_PORT(LINE_STATUS, io::read, 5);
 
 using port::COM1;
 
-static bool s_initialized = false;
-void init() {
-  init_port(COM1);
-  s_initialized = true;
-  debug::puts("serial: initialized");
-}
-
-bool initialized() { return s_initialized; }
-
-void init_port(uint16_t port) {
+static void init_port(uint16_t port) {
   // Disable interrupts
-  io::outb(INTERRUPTS(port), Interrupts::NONE);
+  io::outb(INTERRUPT_ENABLE(port), Interrupts::NONE);
 
   // Latch bit controls access to baud divisor
   io::outb(LINE_CONTROL(port), LineControl::DATA_LATCH_ACCESS_BIT);
@@ -93,22 +93,19 @@ void init_port(uint16_t port) {
   // Both ends of the serial port must agree on this or transmission will get
   // garbled
   io::outb(LINE_CONTROL(port), LineControl::DATA_BITS_8 |
-                                  LineControl::PARITY_NONE |
-                                  LineControl::STOP_BITS_1);
+                                   LineControl::PARITY_NONE |
+                                   LineControl::STOP_BITS_1);
 
   // Enable Serial FIFO (interrupt at 14 bytes, but we should never trigger
   // that)
   io::outb(FIFO_CONTROL(port),
-          FIFOControl::INTERRUPT_TRIGGER_14_BYTES | FIFOControl::ENABLE |
-              FIFOControl::CLEAR_TRANSMIT | FIFOControl::CLEAR_RECEIVE);
+           FIFOControl::INTERRUPT_TRIGGER_14_BYTES | FIFOControl::ENABLE |
+               FIFOControl::CLEAR_TRANSMIT | FIFOControl::CLEAR_RECEIVE);
 
   // Override any error that may have occurred in the meantime
   io::outb(MODEM_CONTROL(port), ModemControl::FORCE_DATA_READY |
-                                   ModemControl::FORCE_REQUEST_SEND |
-                                   ModemControl::AUX_OUTPUT_2);
-
-  // Re-enable data interrupt (enabling access to the port)
-  io::outb(INTERRUPTS(port), Interrupts::DATA_AVAILABLE);
+                                    ModemControl::FORCE_REQUEST_SEND |
+                                    ModemControl::AUX_OUTPUT_2);
 }
 
 static bool transmit_ready(int16_t port) {
@@ -116,9 +113,18 @@ static bool transmit_ready(int16_t port) {
 }
 
 void send(int16_t port, uint8_t b) {
-  while (!transmit_ready(serial::port::COM1))
+  while (!transmit_ready(port::COM1))
     ;
   io::outb(DATA(COM1), (uint8_t)b);
+}
+
+static bool s_initialized = false;
+bool initialized() { return s_initialized; }
+
+void init() {
+  init_port(COM1);
+  s_initialized = true;
+  puts("serial: initialized");
 }
 
 } // namespace serial

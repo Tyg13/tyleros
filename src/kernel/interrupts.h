@@ -14,7 +14,7 @@ struct interrupt_frame {
 } __attribute__((packed));
 static_assert(sizeof(interrupt_frame) == 40);
 
-uintptr_t get_handler(unsigned int vector_index);
+uintptr_t get_handler(unsigned char vector_index);
 
 inline void enable() { asm volatile("sti" ::: "memory", "cc"); }
 inline void disable() { asm volatile("cli" ::: "memory", "cc"); }
@@ -27,17 +27,20 @@ inline bool enabled() {
 }
 
 struct scoped_disable {
-  scoped_disable() : interrupts_were_enabled{interrupts::enabled()} {
+  scoped_disable() {
     interrupts::disable();
   }
   ~scoped_disable() {
-    if (interrupts_were_enabled)
-      interrupts::enable();
+    interrupts::enable();
   }
-
-private:
-  bool interrupts_were_enabled;
 };
+
+template <typename F>
+__attribute__((always_inline)) inline decltype(auto)
+with_interrupts_disabled(F &&action) {
+  scoped_disable d;
+  return action();
+}
 
 } // namespace interrupts
 

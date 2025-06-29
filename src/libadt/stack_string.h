@@ -1,0 +1,4 @@
+#ifndef LIBADT_STACK_STRING_H
+#define LIBADT_STACK_STRING_H
+
+#endif

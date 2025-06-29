@@ -1,9 +1,31 @@
 #include "assert.h"
-#include <stdio.h>
+#include "stdlib.h"
 
-void _handle_assert(const char *file, unsigned line, const char *condition) {
-  fprintf(stderr, "assertion failed: %s:%d: `%s`\n", file, line, condition);
-  asm volatile ("int3" ::: "memory");
-  __builtin_unreachable();
+#if !LIBC_IN_KERNEL
+#include "stdio.h"
+#include "platform_specific.h"
+#endif
+
+#if TESTING_LIBC
+using namespace kstd;
+#endif
+
+#if LIBC_IN_KERNEL
+namespace kstd {
+[[noreturn]] __attribute__((cold)) void panic(const char *msg, ...);
+} // namespace kstd
+[[noreturn]]
+__attribute__((cold)) static void handle_assert(const char *file, unsigned line,
+                                                const char *condition) {
+  kstd::panic("assertion failed: %s:%d: `%s`\n", file, line, condition);
 }
-_assert_handler _on_assert = &_handle_assert;
+#else
+[[noreturn]]
+__attribute__((cold)) static void handle_assert(const char *file, unsigned line,
+                                                const char *condition) {
+  printf("assertion failed: %s:%d: `%s`\n", file, line, condition);
+  abort();
+}
+#endif
+
+_assert_handler _on_assert = &handle_assert;

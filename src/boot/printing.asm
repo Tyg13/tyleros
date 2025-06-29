@@ -35,13 +35,16 @@ vga_print:
     je .handle_nl
 
     ; Not a newline, write actual char to screen
-    mov di, cx ; x * 80 = 16x + 64x
-    mov dx, cx
-    shl di, 4  ; x << 4 == 16x
-    shl dx, 6  ; x << 6 == 64x
-    add di, dx ; 16x + 64x (current_line * 80)
-    add di, bx 
-    shl di, 1  ; di = 2 * (current_line * 80 + current_column)
+    ; at position `80 * line + column`.
+    ;
+    ; Note that `x * 80 = 16x + 64x`
+    mov di, cx ; line
+    mov dx, cx ; line
+    shl di, 4  ; line << 4 == 16 * line
+    shl dx, 6  ; line << 6 == 64 * line
+    add di, dx ; 16 * line + 64 * line (80 * line)
+    add di, bx ; 80 * line + column
+    shl di, 1  ; di = 2 * (80 * line + column)
     mov [es:di], al
     inc di
     mov al, 0x07
@@ -81,10 +84,11 @@ vga_print:
 current_line: db 0
 current_column: db 0
 
-; clobbers: ax, cx, di, bp
+; clobbers: cx, di, bp
 global print_init
 print_init:
     push es
+    push ax
 
     ; set 80x60 mode
     mov ax, 0x001A
@@ -98,6 +102,7 @@ print_init:
     xor ax, ax
     rep stosb
 
+    pop ax
     pop es
 
     mov bp, .init_msg

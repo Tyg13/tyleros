@@ -2,7 +2,6 @@
 
 #include "alloc.h"
 #include "cmos.h"
-#include "debug.h"
 #include "interrupts.h"
 #include "memory.h"
 
@@ -13,45 +12,59 @@ extern "C" scheduler::fxsave_data temp_fxsave;
 
 namespace scheduler {
 
-static task_context *tasks = nullptr;
-static fxsave_data *fxsave_blocks = nullptr;
 static constexpr auto MAX_TASKS = 0x100;
-static constexpr auto KERNEL_TASK_ID = 0;
-static unsigned int current_task = 0;
+static constexpr auto KERNEL_TASK_ID = task_id{0};
+static task_id current_task_id;
 static unsigned int total_tasks = 1;
+static task_context (*tasks)[MAX_TASKS] = nullptr;
+static fxsave_data *fxsave_blocks = nullptr;
 static constexpr auto TASK_STACK_SIZE = memory::PAGE_SIZE * 4;
 static constexpr auto TASK_STACK_ALIGN = kstd::Align{16};
 
-unsigned int get_current_task() { return current_task; }
+task_id get_current_task_id() { return current_task_id; }
+task_context *get_current_task() {
+  return tasks ? &(*tasks)[current_task_id] : nullptr;
+}
 
 void init() {
-  tasks = alloc::zeroed_array_of<task_context>(MAX_TASKS);
-  tasks[KERNEL_TASK_ID].state = task_state::runnable;
+  assert(cmos::initialized() && "scheduler requires CMOS!");
+
+  tasks = reinterpret_cast<task_context(*)[MAX_TASKS]>(
+      alloc::zeroed_array_of<task_context>(MAX_TASKS));
+  current_task_id = KERNEL_TASK_ID;
+  (*tasks)[KERNEL_TASK_ID].state = task_state::running;
 
   fxsave_blocks = alloc::zeroed_array_of<fxsave_data>(MAX_TASKS);
 
-  init_real_time_clock();
-  debug::puts("scheduler: initialized");
+  puts("scheduler: initialized");
 }
 
 bool task_switching_enabled = false;
-void schedule_task(task *new_task, void *context) {
-  task_context *task_slot = nullptr;
+bool no_scheduler_tick = false;
+static task_id schedule_task(bool is_kernel, task *new_task, void *context) {
+  // Disable interrupts while task switching
+  interrupts::scoped_disable disable_interrupts;
+
+  unsigned next_task_id = total_tasks;
   for (unsigned i = 0; i < total_tasks; ++i)
-    if (tasks[i].state == task_state::dead)
-      task_slot = &tasks[i];
+    if ((*tasks)[i].state == task_state::killed) {
+      next_task_id = i;
+      break;
+    }
 
-  auto &task = task_slot ? *task_slot : tasks[total_tasks];
-  assert(total_tasks < MAX_TASKS && "ran out of tasks!");
+  assert(next_task_id < MAX_TASKS && "ran out of tasks!");
+  if (next_task_id == total_tasks)
+    total_tasks += 1;
 
-  task.state = task_state::runnable;
+  task_context &task = (*tasks)[next_task_id];
+  task.state = task_state::waiting;
 
   // Allocate a stack for the task, and make sure the stack pointer
   // points to the end of the buffer (stack grows downwards)
   char *new_stack_top = (char *)alloc::alloc(TASK_STACK_SIZE, TASK_STACK_ALIGN,
                                              alloc::protection::READ_WRITE);
   char *new_stack_base = new_stack_top + TASK_STACK_SIZE;
-  task.stack_base = new_stack_base;
+  task.stack_base = reinterpret_cast<void*>(new_stack_base);
 
   // Put the address of exit() on the stack, so the task terminates properly
   new_stack_base -= sizeof(uintptr_t);
@@ -61,8 +74,10 @@ void schedule_task(task *new_task, void *context) {
   task.frame.rsp = reinterpret_cast<uint64_t>(new_stack_base);
 
   task.frame.rip = reinterpret_cast<uint64_t>(new_task);
-  task.frame.cs = 0x8;
-  task.frame.ss = 0x10;
+  task.frame.cs =
+      is_kernel ? gdt::KERNEL_CODE_SELECTOR : gdt::USER_CODE_SELECTOR;
+  task.frame.ss =
+      is_kernel ? gdt::KERNEL_DATA_SELECTOR : gdt::USER_DATA_SELECTOR;
 
   // Enable interrupts
   task.frame.rflags = 1 << 9;
@@ -71,57 +86,61 @@ void schedule_task(task *new_task, void *context) {
   // Hence, to get the call new_task(context) put context in rdi
   task.frame.rdi = reinterpret_cast<uint64_t>(context);
 
-  // Don't update the total number of tasks until the task is safely
-  // enqueued, in case we get pre-empted in the middle of scheduling it
-  asm volatile("" ::: "memory");
-  ++total_tasks;
+  return task_id{next_task_id};
+}
+
+task_id schedule_kernel_task(task *new_task, void *context) {
+  return schedule_task(/*is_kernel=*/true, new_task, context);
+}
+task_id schedule_user_task(task *new_task, void *context) {
+  return schedule_task(/*is_kernel=*/false, new_task, context);
 }
 
 extern "C" void task_switch(task_frame *tcb) {
-  // If interrupts are enabled, we might fire another timer interrupt, which
-  // will call back into this function. Avoid that by disabling interrupts
-  // while checking for a task switch. This isn't really perfect, because we
-  // only need to disable the timer interrupt, not all interrupts, but this
-  // will do for now.
-  interrupts::scoped_disable disable_interrupts;
+  interrupts::scoped_disable disable;
+
+  assert((*tasks)[current_task_id].state == task_state::running &&
+         "current task is not running?");
 
   // find the next runnable task in our task list
-  const unsigned int old_task = current_task;
+  const unsigned int old_task = current_task_id;
   unsigned int next_task = old_task;
   do {
-    next_task = next_task >= total_tasks - 1 ? 0 : next_task + 1;
-  } while (tasks[next_task].state != task_state::runnable);
+    if (++next_task >= total_tasks)
+      next_task = 0;
 
-  // No need to task switch
-  if (next_task == current_task)
-    return;
+    // No need to task switch
+    if (next_task == current_task_id)
+      return;
+
+  } while ((*tasks)[next_task].state != task_state::waiting);
 
   // save the frame of the old task being switched out
-  tasks[old_task].frame = *tcb;
+  (*tasks)[old_task].frame = *tcb;
   fxsave_blocks[old_task] = temp_fxsave;
 
   // load the frame of the next task being switched in
   temp_fxsave = fxsave_blocks[next_task];
-  *tcb = tasks[next_task].frame;
+  *tcb = (*tasks)[next_task].frame;
 
-  current_task = next_task;
+  (*tasks)[next_task].state = task_state::running;
+
+  current_task_id.id = next_task;
 }
 
-void yield() {
-  if (interrupts::enabled() && task_switching_enabled)
-    asm volatile("int $0x28");
+void kill(task_id id) {
+  interrupts::with_interrupts_disabled([=]() {
+    // kill the task and deallocate its stack
+    (*tasks)[id].state = task_state::killed;
+    auto *stack_base = reinterpret_cast<char *>((*tasks)[id].stack_base);
+    if (stack_base)
+      alloc::free(stack_base - TASK_STACK_SIZE);
+  });
 }
 
 void exit() {
-  {
-    interrupts::scoped_disable disable;
-
-    // kill the task and deallocate its stack
-    tasks[current_task].state = task_state::dead;
-    alloc::free(tasks[current_task].stack_base - TASK_STACK_SIZE,
-                TASK_STACK_ALIGN);
-  }
-
+  kill(current_task_id);
+  interrupts::enable();
   yield();
 loop:
   goto loop;

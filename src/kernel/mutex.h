@@ -2,7 +2,7 @@
 #define MUTEX_H
 
 #include "scheduler.h"
-#include "adt/optional.h"
+#include "libadt/optional.h"
 #include "timing.h"
 
 #include <utility>
@@ -55,13 +55,13 @@ template <typename T> class mutex_handle {
   mutex::guard lock{};
   T *data = nullptr;
 
-  friend class optional_storage<mutex_handle<T>>;
+  friend class adt::optional_storage<mutex_handle<T>>;
   mutex_handle() = default;
 
 public:
   mutex_handle(mutex &m, T &data) : lock{m}, data{&data} {}
-  mutex_handle(mutex &m, T &data, mutex::already_locked l)
-      : lock{m, l}, data{&data} {}
+  mutex_handle(mutex &m, T &data, mutex::already_locked)
+      : lock{m, mutex::already_locked{}}, data{&data} {}
 
   mutex_handle(const mutex_handle &) = delete;
   mutex_handle &operator=(const mutex_handle &) = delete;
@@ -95,13 +95,13 @@ template <typename T> struct managed_by_mutex {
 public:
   mutex_handle<T> lock() { return mutex_handle{m, data}; }
 
-  kstd::optional<mutex_handle<T>> try_lock() {
+  adt::optional<mutex_handle<T>> try_lock() {
     if (m.try_acquire())
       return mutex_handle{m, data, mutex::already_locked{}};
-    return kstd::none;
+    return adt::none;
   }
 
-  kstd::optional<mutex_handle<T>> try_lock_for(microseconds us) {
+  adt::optional<mutex_handle<T>> try_lock_for(microseconds us) {
     uint64_t waited = 0;
     while (waited < us.val) {
       if (auto lock = try_lock())
@@ -109,7 +109,7 @@ public:
       busy_sleep(1_us);
       ++waited;
     }
-    return kstd::none;
+    return adt::none;
   }
 
 private:
@@ -117,9 +117,11 @@ private:
   T data;
 };
 
-template <typename T>
-class optional_storage<mutex_handle<T>> {
-  using handle = mutex_handle<T>;
+} // namespace kstd
+
+namespace adt {
+template <typename T> class optional_storage<kstd::mutex_handle<T>> {
+  using handle = kstd::mutex_handle<T>;
   handle h;
 
 public:
@@ -136,8 +138,8 @@ public:
   handle &get() & { return h; }
   handle &&get() && { return h; }
 };
-static_assert(sizeof(optional<mutex_handle<int>>) == sizeof(mutex_handle<int>));
+} // namespace adt
 
-} // namespace kstd
+static_assert(sizeof(adt::optional<kstd::mutex_handle<int>>) == sizeof(kstd::mutex_handle<int>));
 
 #endif

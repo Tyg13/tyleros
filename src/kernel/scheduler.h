@@ -1,11 +1,18 @@
 #ifndef SCHEDULER_H
 #define SCHEDULER_H
 
+#include "gdt.h"
 #include "interrupts.h"
+#include "platform_specific.h"
 #include <stdint.h>
-#include <utility>
 
 namespace scheduler {
+
+struct task_frame;
+
+extern "C" bool task_switching_enabled;
+extern "C" bool no_scheduler_tick;
+extern "C" void task_switch(task_frame *tcb);
 
 void init();
 
@@ -39,33 +46,49 @@ struct task_frame {
 } __attribute__((packed));
 
 enum class task_state {
-  runnable = 0,
-  dead,
+  killed = 0,
+  waiting = 1,
+  running = 2,
 };
 
 struct task_context {
   task_frame frame;
   task_state state;
-  uint8_t code;
-  char *stack_base;
+  void *stack_base;
+};
+struct task_id {
+  unsigned int id;
+  operator unsigned int() const { return id; }
 };
 
-void schedule_task(task *new_task, void *context);
-template <typename F> void schedule_task(F &&f, void *context = nullptr) {
-  schedule_task(+std::forward<F>(f), context);
+task_id schedule_user_task(task *new_task, void *context);
+task_id schedule_kernel_task(task *new_task, void *context);
+
+task_id get_current_task_id();
+task_context *get_current_task();
+inline bool get_current_task_is_kernel() {
+  return !get_current_task() ||
+         get_current_task()->frame.cs == gdt::KERNEL_CODE_SELECTOR;
 }
+inline bool get_current_task_is_user() {
+  return get_current_task() &&
+         get_current_task()->frame.cs == gdt::USER_CODE_SELECTOR;
+}
+void kill(task_id id);
 
-unsigned int get_current_task();
+void task_switch();
 
-void yield();
+__attribute__((always_inline)) inline void yield() {
+  if (interrupts::enabled() && task_switching_enabled) {
+    no_scheduler_tick = true;
+    asm volatile("int $0x28");
+  } else
+    asm volatile("pause");
+}
 [[noreturn]] void exit();
 
-extern "C" bool task_switching_enabled;
-
 inline void enable_task_switch() {
-  interrupts::disable();
-  task_switching_enabled = true;
-  interrupts::enable();
+  interrupts::with_interrupts_disabled([]() { task_switching_enabled = true; });
 }
 
 } // namespace scheduler

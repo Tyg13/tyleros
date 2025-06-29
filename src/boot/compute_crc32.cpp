@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-extern uint32_t crc32(void *data, uint32_t len);
+extern "C" uint32_t crc32(void *data, uint32_t len);
 
 int main(int argc, char *argv[]) {
   if (argc < 3)
@@ -27,7 +27,7 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-  char *data = malloc(len);
+  char *data = new char[len];
   if (!data) {
     fprintf(stderr, "malloc(%d) failed\n", len);
     return EXIT_FAILURE;
@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
   const uint32_t computed_crc32 = crc32(data, len);
-  free(data);
+  delete[] data;
   fclose(in);
 
   FILE *out = fopen(argv[2], "w");

@@ -1,4 +1,6 @@
 cmake_minimum_required (VERSION 3.14)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
 
@@ -10,17 +12,13 @@ enable_language(ASM_NASM)
 
 project(tyleros C CXX ASM_NASM)
 
-set(BINARY_DIR "${CMAKE_SOURCE_DIR}/bin")
+if(NOT DEFINED BINARY_DIR)
+    set(BINARY_DIR "${CMAKE_SOURCE_DIR}/bin")
+endif()
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${BINARY_DIR}")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${BINARY_DIR}")
 
-# Default to Debug if not specified on the command line
-if(NOT DEFINED CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Debug)
-endif(NOT DEFINED CMAKE_BUILD_TYPE)
-
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --std=c++2a -Wall -Werror -Wno-unused-const-variable -mno-red-zone -ffreestanding -fno-exceptions -fno-rtti -mcmodel=kernel -fno-pic")
-set(CMAKE_CXX_FLAGS_DEBUG "-ggdb3 -Og")
-set(CMAKE_CXX_FLAGS_RELEASE "-O2 -DNDEBUG")
+set(CMAKE_CXX_FLAGS_DEBUG "-Og")
+set(CMAKE_CXX_FLAGS_RELEASE "-O2")
 
 add_subdirectory(src)

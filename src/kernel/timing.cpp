@@ -1,6 +1,7 @@
 #include "timing.h"
 
 #include "pit.h"
+#include "scheduler.h"
 
 const static auto ticks_per_second =
     (uint64_t)1193182; // TODO document where this came from (see PIT)
@@ -35,5 +36,11 @@ uint64_t get_micros_since_start() { return micros_since_start; }
 void busy_sleep(microseconds us) {
   const auto begin = get_micros_since_start();
   while (get_micros_since_start() - begin < us.val)
-    asm volatile("pause");
+    scheduler::yield();
+}
+
+void busy_sleep(milliseconds ms) {
+  const auto begin = get_millis_since_start();
+  while (get_millis_since_start() - begin < ms.val)
+    scheduler::yield();
 }

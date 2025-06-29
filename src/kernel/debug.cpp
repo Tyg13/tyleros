@@ -7,17 +7,12 @@
 #include <stdio.h>
 
 namespace debug {
-
 bool puts(const char *str) {
   if (str == nullptr)
     return false;
 
   for (auto s = str; *s != '\0'; ++s)
     serial::send(serial::port::COM1, *s);
-  serial::send(serial::port::COM1, '\n');
-
-  if (vga::initialized)
-    vga::string::puts(str);
 
   return true;
 }
@@ -42,13 +37,6 @@ void printf(const char *fmt, ...) {
 
 } // namespace debug
 
-void debug_print(const char *str) {
-  if (str == nullptr)
-    return;
-
-  for (auto s = str; *s != '\0'; ++s)
-    serial::send(serial::port::COM1, *s);
-
-  if (vga::initialized)
-    vga::string::print(str);
+extern "C" void debug_print(const char *str) {
+  debug::puts(str);
 }

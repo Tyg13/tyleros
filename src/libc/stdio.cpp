@@ -1,13 +1,14 @@
-#include "stdio.h"
-#include "string.h"
+#include "./stdio.h"
+#include "./string.h"
+#include "./stdlib.h"
+#include "./platform_specific.h"
 
+#include <limits>
 #include <stdarg.h>
 #include <stdint.h>
 
-static FILE _stdout { 1 };
-static FILE _stderr { 2 };
-FILE *stdout = &_stdout;
-FILE *stderr = &_stderr;
+LIBC_NAMESPACE_BEGIN
+struct FILE { int _; };
 
 int printf(const char *msg, ...) {
   va_list args;
@@ -33,19 +34,21 @@ int fprintf(FILE *f, const char * msg, ...) {
   return ret;
 }
 
-#ifdef IN_KERNEL
+#ifdef LIBC_IN_KERNEL
 static char printf_buffer[0x200];
 extern "C" void vga_print(const char *text);
 extern "C" void debug_print(const char *text);
 int vfprintf(FILE *f, const char *msg, va_list args) {
-  int ret = vsnprintf(printf_buffer, 0x200, msg, args);
-  if (f == stdout)
+  vsnprintf(printf_buffer, 0x200, msg, args);
+  if (f == stdout) {
     vga_print(printf_buffer);
-  else if (f == stderr)
     debug_print(printf_buffer);
-  else
-    asm volatile ("int $0x80");
-  return ret;
+  } else if (f == stderr) {
+    debug_print(printf_buffer);
+  } else {
+    abort();
+  }
+  return 0;
 }
 #else
 int vfprintf(FILE *f, const char *msg, va_list args) {
@@ -159,22 +162,37 @@ int vsnprintf(char *str, size_t buf_size, const char *fmt, va_list args) {
   };
 
   const auto length_to_digits = [](length l, unsigned base) -> unsigned {
-    const auto log = base == 16  ? [](unsigned N) { return N >> 2; }
-                     : base == 8 ? [](unsigned N) { return N >> 1; }
-                                 : [](unsigned N) { return N * 100 / 332 + 1; };
     switch (l) {
     default:
-      return log(sizeof(int) * 8);
+      return base == 10   ? std::numeric_limits<unsigned int>::digits10
+             : base == 16 ? sizeof(unsigned int) * 2
+             : base == 8  ? sizeof(unsigned int) * 4
+                          : std::numeric_limits<unsigned>::max();
     case long_int:
-      return log(sizeof(long int) * 8);
+      return base == 10   ? std::numeric_limits<long int>::digits10
+             : base == 16 ? sizeof(long int) * 2
+             : base == 8  ? sizeof(long int) * 4
+                          : std::numeric_limits<unsigned>::max();
     case long_long_int:
-      return log(sizeof(long long int) * 8);
+      return base == 10   ? std::numeric_limits<long long int>::digits10
+             : base == 16 ? sizeof(long long int) * 2
+             : base == 8  ? sizeof(long long int) * 4
+                          : std::numeric_limits<unsigned>::max();
     case short_int:
-      return log(sizeof(short) * 8);
+      return base == 10   ? std::numeric_limits<short int>::digits10
+             : base == 16 ? sizeof(short int) * 2
+             : base == 8  ? sizeof(short int) * 4
+                          : std::numeric_limits<unsigned>::max();
     case char_int:
-      return log(sizeof(char) * 8);
+      return base == 10   ? std::numeric_limits<char>::digits10
+             : base == 16 ? sizeof(char) * 2
+             : base == 8  ? sizeof(char) * 4
+                          : std::numeric_limits<unsigned>::max();
     case size_int:
-      return log(sizeof(size_t) * 8);
+      return base == 10   ? std::numeric_limits<size_t>::digits10
+             : base == 16 ? sizeof(size_t) * 2
+             : base == 8  ? sizeof(size_t) * 4
+                          : std::numeric_limits<unsigned>::max();
     }
   };
 
@@ -259,7 +277,8 @@ int vsnprintf(char *str, size_t buf_size, const char *fmt, va_list args) {
                   false, length_to_digits(length, 16), flags);
       break;
     case 'p':
-      put_integer((uintptr_t)va_arg(args, void *), 16, false, false, 16, flags);
+      put_integer((uintptr_t)va_arg(args, void *), 16, false, false, 16,
+                  flags::pad0);
       break;
     case 'n':
       switch (length) {
@@ -313,3 +332,36 @@ int sprintf(char *str, const char *fmt, ...) {
 
   return ret;
 }
+
+#ifdef LIBC_IN_KERNEL
+extern "C" void vga_puts(const char *text);
+extern "C" void debug_puts(const char *text);
+int fputs(const char *str, FILE *stream) {
+  if (stream == stdout) {
+    vga_print(str);
+    debug_print(str);
+  } else if (stream == stderr) {
+    debug_print(str);
+  }
+  return 0;
+}
+#else
+int fputs(const char *str, FILE *stream) {
+  return EOF;
+}
+#endif
+
+int puts(const char *str) {
+  fputs(str, stdout);
+  fputs("\n", stdout);
+  return 0;
+}
+
+static FILE files[0x100] = {};
+FILE *stdout = &files[0];
+FILE *stderr = &files[1];
+
+FILE *fopen(const char *path, const char *mode) {
+  return nullptr;
+}
+LIBC_NAMESPACE_END

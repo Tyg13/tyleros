@@ -6,7 +6,6 @@
 #include <stddef.h>
 
 #include "util.h"
-#include "util/allocator.h"
 
 namespace alloc {
 
@@ -19,7 +18,7 @@ enum protection {
 void init();
 
 void *alloc(size_t count, kstd::Align alignment, protection p);
-void free(void *data, kstd::Align alignment);
+void free(void *data);
 
 inline void *alloc_zeroed(size_t count, kstd::Align alignment, protection p) {
   assert(p != READ_ONLY && "can't zero-out read-only memory (add support?)");
@@ -47,7 +46,7 @@ struct standard_alloc {
   static void *allocate(size_t n, kstd::Align alignment) {
     return alloc::alloc(n, alignment, alloc::protection::READ_WRITE);
   }
-  static void deallocate(void *p, kstd::Align alignment) { alloc::free(p, alignment); }
+  static void deallocate(void *p, kstd::Align alignment) { alloc::free(p); }
 };
 } // namespace kstd
 

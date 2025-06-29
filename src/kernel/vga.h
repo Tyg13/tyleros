@@ -27,11 +27,8 @@ constexpr auto SCREEN_WIDTH = 80;
 constexpr auto SCREEN_HEIGHT = 25;
 
 struct cursor {
-  int x;
-  int y;
-
-  void newline();
-  void reset() { x = 0; y = 0; }
+  int x = 0;
+  int y = 0;
 };
 
 inline bool operator==(const cursor &lhs, const cursor &rhs) {
@@ -41,8 +38,20 @@ inline bool operator!=(const cursor &lhs, const cursor &rhs) {
   return !(lhs == rhs);
 }
 
+class screen {
+  uint16_t *buffer;
+  cursor position;
+
+public:
+  screen(uint16_t *buffer) : buffer{buffer}, position{} {}
+  void print_char(char c, color fg, color bg);
+  void set_cursor(cursor pos) { position = pos; }
+  void advance_cursor_to_newline();
+  void clear();
+};
+
 extern const cursor null_cursor;
-extern kstd::managed_by_mutex<cursor> current_cursor;
+extern kstd::managed_by_mutex<screen> current_screen;
 
 class string {
   const char *text = nullptr;
@@ -50,7 +59,7 @@ class string {
   color foreground = color::white;
   cursor position = null_cursor;
 
-  void write_impl(cursor &c) const;
+  void write_impl(screen &c) const;
 
 public:
   string() = default;
@@ -78,10 +87,6 @@ public:
 extern bool initialized;
 void init();
 
-void clear_screen();
-
 } // namespace vga
-
-extern "C" void vga_print(const char *text);
 
 #endif

@@ -2,10 +2,6 @@
 ; This stage sets up page tables, builds a map of physical memory, and reads
 ; the kernel binary from floppy. It then enters long mode, loads the kernel at
 ; its intended virtual address and jumps into it.
-; Page Mappings
-;   Physical                 Virtual                  
-;   0000 0000 - 0008 0000 -> 0000 0000 - 0008 0000
-;   0010 0000 - 0030 0000 -> 0C00 0000 - 0C20 0000
 [BITS 16]
 
 ; a20.asm
@@ -44,6 +40,8 @@ _start:
     ; dl contains our drive number
     mov byte [boot_info.drive_number], dl
 
+    call print_init
+
     ; Align `eax` to a 0x1000 (4 KiB) boundary
     and eax, -PAGE_SIZE
     add eax, PAGE_SIZE
@@ -71,8 +69,6 @@ _start:
     mov ss, ax
     mov sp, 2 * PAGE_SIZE
 
-    call print_init
-
     call check_a20
     test al, al
     jnz .a20_good
@@ -95,9 +91,8 @@ _start:
 
     mov dl, byte [boot_info.drive_number]
     call read_kernel_from_filesystem
-    mov dword [boot_info.kernel_physical_start], eax
-    mov dword [boot_info.kernel_physical_end], edx
-    mov dword [boot_info.kernel_boot_size], ecx
+    mov dword [boot_info.kernel_image_start], eax
+    mov dword [boot_info.kernel_image_size], ecx
     mov dword [avail_mem_start], edx
 
     mov bp, strings.kernel_loaded
@@ -119,9 +114,13 @@ _start:
     shr ecx, LOG2_PAGE_SIZE
     call map_contiguous_pages
 
-    ; Map 0x0000'0000'0010'0000 - 0x0000'0000'0030'0000 (0x200 pages,
-    ;  to 0xFFFF'FFFF'8000'0000 - 0xFFFF'FFFF'8020'0000  2M for the kernel)
-    mov esi, 0x100000
+    ; Kernel gets loaded at 0x100000 physical and expects to be loaded at the
+    ; same address relative to the start of the upper-half range of memory.
+    ; (i.e. 0xFFFF'FFFF'8010'0000)
+    ;
+    ; Map 0x0000'0000'0000'0000 - 0x0000'0000'0020'0000 (0x200 pages,
+    ;  to 0xFFFF'FFFF'8000'0000 - 0xFFFF'FFFF'8020'0000  1M for the kernel)
+    mov esi, 0x000000
     mov ebx, KERNEL_BASE_HI
     mov edi, KERNEL_BASE_LO
     mov ecx, 0x200
@@ -178,7 +177,7 @@ long_mode:
 
     ; load_elf_binary(rsi: current_kernel_address)
     ; Virtual address to jump to will be returned in rax
-    mov esi, [boot_info.kernel_physical_start]
+    mov esi, [boot_info.kernel_image_start]
     call load_elf_binary
 
     ; Set up kernel stack
@@ -215,11 +214,11 @@ boot_info:
     .memory_map_base:        dd 0
     .avail_low_mem_start:    dd 0
     .avail_low_mem_end:      dd 0
-    .kernel_physical_start:  dd 0
-    .kernel_physical_end:    dd 0
-    .kernel_boot_size:       dd 0
+    .kernel_image_start:     dd 0
+    .kernel_image_size:      dd 0
     .drive_number:           dd 0
     .kernel_expected_crc32   dd KERNEL_EXPECTED_CRC32
+    .kernel_stack_base       dq KERNEL_STACK
 
 strings:
     .mem_map_built: db "Memory map built", 0xA, 0
@@ -229,7 +228,7 @@ strings:
 KERNEL_BASE    equ 0xFFFFFFFF80000000
 KERNEL_BASE_HI equ 0xFFFFFFFF
 KERNEL_BASE_LO equ 0x80000000
-KERNEL_STACK   equ KERNEL_BASE + 0x200000
+KERNEL_STACK   equ 0xFFFFFFFF80200000
 
 PAGE_SIZE equ 0x1000
 LOG2_PAGE_SIZE equ 12

@@ -3,10 +3,15 @@ extern task_switch
 
 extern task_switching_enabled
 extern ticks_since_boot
+extern no_scheduler_tick
 
 global scheduler_interrupt
 scheduler_interrupt:
+    cmp byte [no_scheduler_tick], 1
+    je check_for_switch
     inc qword [ticks_since_boot]
+
+check_for_switch:
     cmp byte [task_switching_enabled], 1
     je do_task_switch
 
@@ -48,8 +53,16 @@ do_task_switch:
     push r15
     mov rdi, rsp
     call task_switch
+
+    ; If needed, reset the mechanism we used to disable the scheduler tick (to
+    ; indicate this interrupt was caused by an explicit yield instead of a
+    ; timer tick)
+    xor eax, eax
+    mov byte [no_scheduler_tick], al
+
     ; A new task frame (if we switched frames) is returned on the stack
     ; Restore the context
+    fxrstor [temp_fxsave]
     pop r15
     pop r14
     pop r13
@@ -65,7 +78,6 @@ do_task_switch:
     pop rcx
     pop rbx
     pop rax
-    fxrstor [temp_fxsave]
     jmp end_of_interrupt
 
 section .bss

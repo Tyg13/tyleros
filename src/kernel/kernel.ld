@@ -1,14 +1,18 @@
 ENTRY(_start)
 OUTPUT_FORMAT(elf64-x86-64)
 
-KERNEL_VMA_BASE = 0xFFFFFFFF80000000;
+KERNEL_VMA_BASE = 0xFFFFFFFF80100000;
 KERNEL_LMA_BASE = 0x100000;
 
 SECTIONS
 {
      . = KERNEL_VMA_BASE;
     __text_start__ = .;
-    .init : AT(KERNEL_LMA_BASE)
+    .canary : AT(KERNEL_LMA_BASE)
+    {
+        *(.canary_begin)
+    }
+    .init :
     {
         *crti*(.init)
         *crtbegin*(.init)
@@ -49,6 +53,10 @@ SECTIONS
     .bss : { *(.bss COMMON) }
     . = ALIGN(4K);
     __bss_end__ = .;
+    .canary :
+    {
+        *(.canary_end)
+    }
 
     /DISCARD/ :
     {

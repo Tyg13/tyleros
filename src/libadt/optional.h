@@ -1,9 +1,9 @@
-#ifndef ADT_OPTIONAL_H
-#define ADT_OPTIONAL_H
+#ifndef LIBADT_OPTIONAL_H
+#define LIBADT_OPTIONAL_H
 
 #include <utility>
 
-namespace kstd {
+namespace adt {
 
 struct none_t {};
 static inline none_t none;
@@ -31,11 +31,11 @@ public:
   }
 
   bool has_data() const { return has_value; }
-  void set_value(const T& value) {
+  void set_value(const T &value) {
     data.value = value;
     has_value = true;
   }
-  void set_value(T&& value) {
+  void set_value(T &&value) {
     data.value = std::move(value);
     has_value = true;
   }
@@ -50,10 +50,11 @@ public:
 
 template <typename T> struct optional {
   optional_storage<T> storage;
+
 public:
   optional() : storage{} {}
   optional(const T &value) : storage(value) {}
-  optional(T &&value) : storage(std::move(value)){}
+  optional(T &&value) : storage(std::move(value)) {}
   optional(none_t) : optional() {}
   ~optional() = default;
   optional(const optional &other) : optional() { *this = other; }
@@ -81,7 +82,7 @@ public:
   T *operator->() { return &storage.get(); }
 
   bool has_value() const { return storage.has_data(); }
-  operator bool() const { return has_value(); }
+  explicit operator bool() const { return has_value(); }
 
   optional &operator=(T value) {
     *this = optional(value);
@@ -89,10 +90,38 @@ public:
   }
 
   optional &operator=(none_t) {
-    *this = optional(none);
+    storage.destroy();
     return *this;
   }
+
+  friend bool operator==(const optional &lhs, const optional &rhs) {
+    if (lhs && rhs)
+      return *lhs == *rhs;
+    return lhs && rhs;
+  }
+
+  friend bool operator!=(const optional &lhs, const optional &rhs) {
+    return !(lhs == rhs);
+  }
+
+  friend bool operator==(const optional &lhs, const T &rhs) {
+    return lhs && *lhs == rhs;
+  }
+  friend bool operator!=(const optional &lhs, const T &rhs) {
+    return !(lhs == rhs);
+  }
+
+  friend bool operator==(const T &lhs, const optional &rhs) {
+    return rhs && *rhs == lhs;
+  }
+  friend bool operator!=(const T &lhs, const optional &rhs) {
+    return !(lhs == rhs);
+  }
+
+  friend bool operator==(const optional &lhs, const none_t &) { return !lhs; }
+  friend bool operator!=(const optional &lhs, const none_t &) { return lhs; }
 };
-} // namespace kstd
+
+} // namespace adt
 
 #endif

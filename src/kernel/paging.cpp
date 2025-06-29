@@ -1,9 +1,10 @@
 #include "paging.h"
 
-#include "debug.h"
-#include "low_memory_allocator.h"
 #include "memory.h"
 #include "util.h"
+#include "pma.h"
+#include "vma.h"
+#include "panic.h"
 
 #include <assert.h>
 #include <string.h>
@@ -11,26 +12,79 @@
 using namespace memory;
 
 namespace paging {
+
 page_tables kernel_page_tables;
-static volatile uintptr_t *find_page_entry(const page_tables &tables,
-                                           void *addr);
 
-constexpr static auto PAGE_RW = paging::attributes::RW;
-constexpr static auto PAGE_PRESENT = paging::attributes::PRESENT;
-constexpr static auto PAGE_XD = paging::attributes::XD;
+static void invlpg(uintptr_t page) {
+  asm volatile("invlpg (%0)" ::"r"(page) : "memory");
+}
 
-static void *allocate_page_level() {
-  const auto addr = low_memory::allocate(PAGE_SIZE, PAGE_ALIGN);
-  // TODO actually grab more page tables if we run out of low memory.
-  assert(addr != nullptr && "No more room for page tables!");
-  return addr;
+// 1 PML4, 1 PML3, 1 PML2, 1 PML1
+//  - 4 pages of kernel address space needed
+//  - (2MB of kernel address space)
+alignas(PAGE_ALIGN.val) page_table kernel_pml4 = {0};
+alignas(PAGE_ALIGN.val) page_table kernel_pml3 = {0};
+alignas(PAGE_ALIGN.val) page_table kernel_pml2 = {0};
+alignas(PAGE_ALIGN.val) page_table kernel_pml1 = {0};
+alignas(PAGE_ALIGN.val) page_table identity_pml3 = {0};
+alignas(PAGE_ALIGN.val) page_table identity_pml2 = {0};
+alignas(PAGE_ALIGN.val) page_table identity_pml1 = {0};
+
+constexpr static auto MAX_STATIC_TABLES = 8;
+alignas(PAGE_ALIGN.val) page_table static_tables[MAX_STATIC_TABLES] = {{0}};
+uint64_t num_static_tables_left = MAX_STATIC_TABLES;
+
+constexpr static auto MAX_DYNAMIC_TABLES = 512;
+page_table *dynamic_tables = nullptr;
+uint64_t num_dynamic_tables_left = 0;
+
+static uintptr_t allocate_page_level() {
+  if (num_static_tables_left > 0) {
+    page_table *next_static_table =
+        &static_tables[--num_static_tables_left];
+    return (uintptr_t)next_static_table - KERNEL_VMA_OFFSET;
+  }
+  assert(
+      dynamic_tables &&
+      "ran out of static tables before dynamic tables could be initialized!");
+  if (num_dynamic_tables_left > 0) {
+    page_table *next_dynamic_table =
+        &dynamic_tables[--num_dynamic_tables_left];
+    return (uintptr_t)next_dynamic_table - KERNEL_VMA_OFFSET;
+  }
+  kstd::panic("no more page tables!");
 }
 
 void early_init() {
-  uintptr_t dummy;
-  asm volatile("mov %%cr3, %0" : "=&r"(dummy));
-  kernel_page_tables.base = (page_level *)dummy;
-  kernel_page_tables.allocate_page_level = &allocate_page_level;
+  // Map 0x0000'0000'0010'0000 - 0x0000'0000'0020'0000 (0x200 pages,
+  //  to 0xFFFF'FFFF'8010'0000 - 0xFFFF'FFFF'8020'0000  1M for the kernel)
+  kernel_pml4[0x1FF] = ((uintptr_t)&kernel_pml3 - KERNEL_VMA_OFFSET) |
+                       attributes::RW | attributes::PRESENT;
+  kernel_pml3[0x1FE] = ((uintptr_t)&kernel_pml2 - KERNEL_VMA_OFFSET) |
+                       attributes::RW | attributes::PRESENT;
+  kernel_pml2[0] = ((uintptr_t)&kernel_pml1 - KERNEL_VMA_OFFSET) |
+                   attributes::RW | attributes::PRESENT;
+  for (unsigned i = 0x100; i < 0x200; ++i) {
+    kernel_pml1[i] =
+        ((uintptr_t)i * PAGE_SIZE) | attributes::XD | attributes::PRESENT;
+  }
+
+  // Identity map the bottom 2M of memory as read-only
+  kernel_pml4[0] = ((uintptr_t)&identity_pml3 - KERNEL_VMA_OFFSET) |
+                   attributes::RW | attributes::PRESENT;
+  identity_pml3[0] = ((uintptr_t)&identity_pml2 - KERNEL_VMA_OFFSET) |
+                     attributes::RW | attributes::PRESENT;
+  identity_pml2[0] = ((uintptr_t)&identity_pml1 - KERNEL_VMA_OFFSET) |
+                     attributes::RW | attributes::PRESENT;
+  // Unmap null page
+  identity_pml1[0] = attributes::NONE;
+  for (unsigned i = 1; i < 0x200; ++i) {
+    identity_pml1[i] =
+        ((uintptr_t)i * PAGE_SIZE) | attributes::XD | attributes::PRESENT;
+  }
+
+  kernel_page_tables.base = &kernel_pml4;
+  kernel_page_tables.allocate = &allocate_page_level;
 }
 
 static uint64_t readmsr(uint32_t n) {
@@ -45,256 +99,336 @@ static void writesmr(uint32_t n, uint64_t val) {
   asm("wrmsr" ::"c"(n), "d"(hi), "a"(lo));
 }
 
-void finish_init() {
-  // Unmap the zero page so accesses through nullptr cause a page fault
-  kernel_page_tables.unmap_page(0);
-  invlpg(0);
-
+void enable_kernel_page_protection(uintptr_t kernel_stack_base) {
   // Enable XD (execute-disable bit) for pages
-  uint64_t efer = readmsr(0xC0000080);
+  const auto efer = readmsr(0xC0000080);
   writesmr(0xC0000080, efer | (1 << 11));
 
-  // Turn on write-protection for kernel (can't write to read-only pages)
-  asm volatile("mov %%cr0, %%rax\n"
-               "or %%rax, %c0\n"
-               "mov %%rax, %%cr0" ::"i"(1 << 16)
-               : "rax", "memory");
+  // Enable bit in CR1 for write-protection for kernel (prevent writes to
+  // read-only pages)
+  int64_t tmp;
+  asm volatile("mov %%cr0, %0\n"
+               "or %0, %c1\n"
+               "mov %0, %%cr0"
+               : "=&r"(tmp)
+               : "i"(1 << 16));
 
   // Set up appropriate page permissions for the various segments linked into
   // the kernel
-  debug::printf(
-      "Paging init: .text : 0x%p - 0x%p (0x%lx - 0x%lx) = EXEC | READ\n",
-      &__text_start__, &__text_end__,
-      kernel_page_tables.get_physical_address(&__text_start__),
-      kernel_page_tables.get_physical_address(&__text_end__));
   for (char *c = &__text_start__; c != &__text_end__; c += PAGE_SIZE) {
-    volatile uintptr_t *entry = find_page_entry(kernel_page_tables, c);
-    assert(entry && "no text page mapped?");
-    assert(*entry & PAGE_PRESENT && "text page not present?");
-    *entry = *entry & ~(PAGE_XD | PAGE_RW);
+    auto entry = kernel_page_tables.find(c);
+    assert(entry != page_tables::iterator::end() && entry.exists() &&
+           "no text page mapped?");
+    assert(entry.present() && "text page not present?");
+    *entry &= ~(attributes::XD | attributes::RW);
   }
 
-  debug::printf("Paging init: .rodata : 0x%p - 0x%p (0x%lx - 0x%lx) = READ\n",
-                &__rodata_start__, &__rodata_end__,
-                kernel_page_tables.get_physical_address(&__rodata_start__),
-                kernel_page_tables.get_physical_address(&__rodata_end__));
   for (char *c = &__rodata_start__; c != &__rodata_end__; c += PAGE_SIZE) {
-    volatile uintptr_t *entry = find_page_entry(kernel_page_tables, c);
-    assert(entry && "no rodata page mapped?");
-    assert(*entry & PAGE_PRESENT && "rodata page not present?");
-    *entry = (*entry | PAGE_XD) & ~PAGE_RW;
+    auto entry = kernel_page_tables.find(c);
+    assert(entry != page_tables::iterator::end() && entry.exists() &&
+           "no rodata page mapped?");
+    assert(entry.present() && "rodata page not present?");
+    *entry = (*entry | attributes::XD) & ~attributes::RW;
   }
 
-  debug::printf(
-      "Paging init: .data : 0x%p - 0x%p (0x%lx - 0x%lx) = READ | WRITE\n",
-      &__data_start__, &__data_end__, kernel_page_tables.get_physical_address(&__data_start__),
-      kernel_page_tables.get_physical_address(&__data_end__));
   for (char *c = &__data_start__; c != &__data_end__; c += PAGE_SIZE) {
-    volatile uintptr_t *entry = find_page_entry(kernel_page_tables, c);
-    assert(entry && "no data page mapped?");
-    assert(*entry & PAGE_PRESENT && "data page not present?");
-    *entry = *entry | PAGE_XD | PAGE_RW;
+    auto entry = kernel_page_tables.find(c);
+    assert(entry != page_tables::iterator::end() && entry.exists() &&
+           "no data page mapped?");
+    assert(entry.present() && "data page not present?");
+    *entry |= (uintptr_t)(attributes::XD | attributes::RW);
   }
 
-  debug::printf(
-      "Paging init: .bss : 0x%p - 0x%p (0x%lx - 0x%lx) = READ | WRITE\n",
-      &__bss_start__, &__bss_end__,
-      kernel_page_tables.get_physical_address(&__bss_start__),
-      kernel_page_tables.get_physical_address(&__bss_end__));
   for (char *c = &__bss_start__; c != &__bss_end__; c += PAGE_SIZE) {
-    volatile uintptr_t *entry = find_page_entry(kernel_page_tables, c);
-    assert(entry && "no bss page mapped?");
-    assert(*entry & PAGE_PRESENT && "bss page not present?");
-    *entry = *entry | PAGE_XD | PAGE_RW;
+    auto entry = kernel_page_tables.find(c);
+    assert(entry != page_tables::iterator::end() && "no bss page mapped?");
+    assert(entry.present() && "bss page not present?");
+    *entry |= (uintptr_t)(attributes::XD | attributes::RW);
   }
 
-  debug::puts("Paging init: all kernel pages now protected");
+  // Give ourselves 10 pages (40KiB) worth of stack.
+  constexpr static auto KERNEL_STACK_SIZE = 0x10 * PAGE_SIZE;
+  const auto kernel_stack_top = (char *)kernel_stack_base - KERNEL_STACK_SIZE;
+  assert(kernel_stack_top > &__bss_end__ && "bss and stack overlap!");
+  for (char *c = kernel_stack_top; c != (char *)kernel_stack_base;
+       c += PAGE_SIZE) {
+    auto entry = kernel_page_tables.find(c);
+    assert(entry != page_tables::iterator::end() && entry.exists() &&
+           "no stack page mapped?");
+    *entry |=
+        (uintptr_t)(attributes::XD | attributes::RW | attributes::PRESENT);
+  }
+  // Map a guard page below the kernel stack
+  auto entry = kernel_page_tables.find((char *)kernel_stack_base -
+                                       KERNEL_STACK_SIZE - PAGE_SIZE);
+  assert(entry != page_tables::iterator::end() && entry.exists() &&
+         "no stack page mapped?");
+  assert(entry.present() && "stack page not present?");
+  *entry &= ~(uintptr_t)attributes::PRESENT;
+
+  printf("Paging init: .text : 0x%p - 0x%p (0x%lx - 0x%lx) = EXEC | READ\n",
+         &__text_start__, &__text_end__,
+         kernel_page_tables.get_physical_address(&__text_start__),
+         kernel_page_tables.get_physical_address(&__text_end__));
+  printf("Paging init: .rodata : 0x%p - 0x%p (0x%lx - 0x%lx) = READ\n",
+         &__rodata_start__, &__rodata_end__,
+         kernel_page_tables.get_physical_address(&__rodata_start__),
+         kernel_page_tables.get_physical_address(&__rodata_end__));
+  printf("Paging init: .data : 0x%p - 0x%p (0x%lx - 0x%lx) = READ | WRITE\n",
+         &__data_start__, &__data_end__,
+         kernel_page_tables.get_physical_address(&__data_start__),
+         kernel_page_tables.get_physical_address(&__data_end__));
+  printf("Paging init: .bss : 0x%p - 0x%p (0x%lx - 0x%lx) = READ | WRITE\n",
+         &__bss_start__, &__bss_end__,
+         kernel_page_tables.get_physical_address(&__bss_start__),
+         kernel_page_tables.get_physical_address(&__bss_end__));
+  printf("Paging init: stack: 0x%p - 0x%p (0x%lx - 0x%lx) = READ | WRITE\n",
+         (char *)kernel_stack_base - KERNEL_STACK_SIZE,
+         (char *)kernel_stack_base,
+         kernel_stack_base - KERNEL_STACK_SIZE - KERNEL_VMA_OFFSET,
+         kernel_stack_base - KERNEL_VMA_OFFSET);
+
+  asm volatile("mov %0, %%cr3\n\t"
+               :
+               : "r"((uintptr_t)&kernel_pml4 - KERNEL_VMA_OFFSET)
+               : "memory");
+
+  puts("Paging init: all kernel pages now protected");
 }
 
-// Each prefix is 9 bits wide.
-// Each page (and consequently, each page table) must be aligned to 4KiB (1 <<
-// 12);
-constexpr uintptr_t PREFIX_MASK = (1 << 9) - 1;
-constexpr uintptr_t PAGE_TABLE_MASK = PREFIX_MASK << 12;
-constexpr uintptr_t PAGE_DIRECTORY_MASK = PAGE_TABLE_MASK << 9;
-constexpr uintptr_t PAGE_DIRECTORY_POINTER_MASK = PAGE_DIRECTORY_MASK << 9;
-constexpr uintptr_t PAGE_MAP_LEVEL_4_MASK = PAGE_DIRECTORY_POINTER_MASK << 9;
-constexpr uintptr_t ADDRESS_MASK = 0x000FFFFFFFFFF000;
+void finish_init() {
+  const auto physical_pages =
+      pma::get_contiguous_physical_pages(MAX_DYNAMIC_TABLES);
+  void *virtual_addr = kernel_page_tables.identity_map_pages_into_kernel_space(
+      physical_pages, MAX_DYNAMIC_TABLES);
+  dynamic_tables = (page_table *)virtual_addr;
+  memset((void *)dynamic_tables, 0, sizeof(page_table) * MAX_DYNAMIC_TABLES);
+  num_dynamic_tables_left = MAX_DYNAMIC_TABLES;
+  vma::remove_from_free_list(virtual_addr,
+                             sizeof(page_table) * MAX_DYNAMIC_TABLES);
+  uint64_t dummy;
+  asm volatile("mov %%cr3, %0\n"
+               "mov %0, %%cr3"
+               : "=r"(dummy)
+               :
+               : "memory");
+}
 
-static volatile uintptr_t *get_page_entry(page_tables &tables,
-                                          uintptr_t virtual_page_address,
-                                          bool allocate_levels_if_null) {
+#if 0
+static page_entry_lookup_info
+get_page_entry_info(page_tables &tables, uintptr_t virtual_page_address,
+                    bool allocate_levels_if_null) {
   // We need to hit the page tables in the order
-  // page_map_level_4 -> page_directory_pointer_table -> page_directory ->
-  // page_table
+  // pml4 -> pml3 -> pml2 -> pml1 -> entry (ptr to physical page addr)
   //
-  // For each level, we need a block of memory 4KiB (0x1000 bytes) wide, since
-  // each table has 512 (0x200) entries that are 8 bytes wide.
+  // For each table, we need 4KiB (0x1000 bytes = 8 bytes per entry * 512
+  // entries) of memory.
   //
-  // A page itself is 4KiB, so for each level that is null, we allocate an
-  // identity page and insert the level there.
+  // A page itself is 4KiB, so for each table that is null (not yet allocated),
+  // we allocate a (pre-mapped) page and use that.
 
-  const auto page_table_offset = (virtual_page_address & PAGE_TABLE_MASK) >> 12;
-  const auto page_directory_offset =
-      (virtual_page_address & PAGE_DIRECTORY_MASK) >> 21;
-  const auto page_directory_pointer_offset =
-      (virtual_page_address & PAGE_DIRECTORY_POINTER_MASK) >> 30;
-  const auto page_map_level_4_offset =
-      (virtual_page_address & PAGE_MAP_LEVEL_4_MASK) >> 39;
-
-  const auto allocate_level_if_null = [&tables](volatile uintptr_t &
-                                                entry) -> volatile uintptr_t & {
-    if (reinterpret_cast<void *>(entry) == nullptr) {
-      entry = reinterpret_cast<uintptr_t>(tables.allocate_page_level()) |
-              PAGE_RW | PAGE_PRESENT;
+  const auto allocate_table_if_null = [&tables](volatile uintptr_t *
+                                                entry) -> volatile uintptr_t * {
+    if (reinterpret_cast<void *>(*entry) == nullptr) {
+      assert(tables.allocate &&
+             "tried to allocate before table allocator was initialized!");
+      *entry = tables.allocate() | attributes::RW | attributes::PRESENT;
     }
     return entry;
   };
 
-  page_level *pt_ptr = nullptr;
+  page_entry_lookup_info handle{virtual_page_address};
+  handle.tables[0] = tables.base; // PML4
+
   if (allocate_levels_if_null) {
-    auto pdpt =
-        allocate_level_if_null((*tables.base)[page_map_level_4_offset]);
-    auto pdpt_ptr = reinterpret_cast<page_level *>(pdpt & ~PREFIX_MASK);
+    /* PML3 */ const auto *entry_in_pml4 =
+        allocate_table_if_null(&handle.entry_at_level(4));
+    handle.tables[1] = reinterpret_cast<page_table *>(
+        (*entry_in_pml4 & ~PREFIX_MASK) + KERNEL_VMA_OFFSET);
 
-    auto pdt = allocate_level_if_null((*pdpt_ptr)[page_directory_pointer_offset]);
-    auto pdt_ptr = reinterpret_cast<page_level *>(pdt & ~PREFIX_MASK);
+    /* PML2 */ const auto *entry_in_pml3 =
+        allocate_table_if_null(&handle.entry_at_level(3));
+    handle.tables[2] = reinterpret_cast<page_table *>(
+        (*entry_in_pml3 & ~PREFIX_MASK) + KERNEL_VMA_OFFSET);
 
-    auto pt = allocate_level_if_null((*pdt_ptr)[page_directory_offset]);
-    pt_ptr = reinterpret_cast<page_level *>(pt & ~PREFIX_MASK);
+    /* PML1 */ const auto *entry_in_pml2 =
+        allocate_table_if_null(&handle.entry_at_level(2));
+    handle.tables[3] = reinterpret_cast<page_table *>(
+        (*entry_in_pml2 & ~PREFIX_MASK) + KERNEL_VMA_OFFSET);
   } else {
-    auto pdpt = (*kernel_page_tables.base)[page_map_level_4_offset];
-    if (auto pdpt_ptr = reinterpret_cast<page_level *>(pdpt & ~PREFIX_MASK)) {
-      auto pdt = (*pdpt_ptr)[page_directory_pointer_offset];
-      if (auto pdt_ptr = reinterpret_cast<page_level *>(pdt & ~PREFIX_MASK)) {
-        auto pt = (*pdt_ptr)[page_directory_offset];
-        pt_ptr = reinterpret_cast<page_level *>(pt & ~PREFIX_MASK);
+    if ((handle.tables[1] = reinterpret_cast<page_table *>(
+             (handle.entry_at_level(4) & ~PREFIX_MASK) + KERNEL_VMA_OFFSET))) {
+      if (((handle.tables[2] = reinterpret_cast<page_table *>(
+                (handle.entry_at_level(3) & ~PREFIX_MASK) +
+                KERNEL_VMA_OFFSET)))) {
+        handle.tables[3] = reinterpret_cast<page_table *>(
+            (handle.entry_at_level(2) & ~PREFIX_MASK) + KERNEL_VMA_OFFSET);
       }
     }
   }
 
-  return pt_ptr ? &(*pt_ptr)[page_table_offset] : nullptr;
-}
+  if (handle.tables[3])
+    handle.entry = &handle.entry_at_level(1);
 
-static volatile uintptr_t *allocate_page_entry(page_tables &tables,
-                                               uintptr_t addr) {
-  return get_page_entry(tables, addr, true);
+  return handle;
 }
-static volatile uintptr_t *find_page_entry(const page_tables &tables,
-                                           uintptr_t addr) {
-  return get_page_entry(const_cast<page_tables &>(tables), addr, false);
-}
-static volatile uintptr_t *find_page_entry(const page_tables &tables,
-                                           void *addr) {
-  return get_page_entry(const_cast<page_tables &>(tables), (uintptr_t)addr,
-                        false);
-}
+#endif
 
 uintptr_t page_tables::get_physical_address(void *virtual_addr) const {
   const auto page_addr = (uintptr_t)virtual_addr & -PAGE_SIZE;
   const auto offset_in_page = (uintptr_t)virtual_addr - page_addr;
-  const auto *entry = find_page_entry(*this, page_addr);
-  assert(entry && "entry not found!");
-  return entry ? (*entry & ADDRESS_MASK) + offset_in_page : (uintptr_t) nullptr;
+  const auto entry = find((void*)page_addr);
+  assert(entry != page_tables::iterator::end() &&
+         "couldn't find an entry for address!");
+  if (!entry.present())
+    fprintf(stderr, "entry not present for addr %p\n", virtual_addr);
+  assert(entry.present() && "entry not found!");
+  return entry.physical_page_address() + offset_in_page;
 }
 
 void *page_tables::map_range(uintptr_t physical_start, uintptr_t physical_end,
-                           uintptr_t virtual_start, uintptr_t virtual_end) {
-  assert(virtual_start % memory::PAGE_SIZE == 0 &&
-         virtual_end % memory::PAGE_SIZE == 0 &&
+                             void *virtual_start, void *virtual_end,
+                             attributes attrs) {
+  assert((uintptr_t)virtual_start % memory::PAGE_SIZE == 0 &&
+         (uintptr_t)virtual_end % memory::PAGE_SIZE == 0 &&
          "virtual addresses must be page-aligned!");
   assert(physical_start % memory::PAGE_SIZE == 0 &&
          physical_end % memory::PAGE_SIZE == 0 &&
          "physical addresses must be page-aligned!");
-  assert((physical_end - physical_start) == (virtual_end - virtual_start) &&
+  assert((physical_end - physical_start) ==
+             ((uintptr_t)virtual_end - (uintptr_t)virtual_start) &&
          "physical and virtual address range sizes must match!");
-  for (auto p = physical_start, v = virtual_start;
-       p < physical_end && v < virtual_end; p += PAGE_SIZE, v += PAGE_SIZE) {
-    map_page(p, v);
+  auto it = get(virtual_start);
+  auto v = reinterpret_cast<uintptr_t>(virtual_start);
+  for (auto p = physical_start; p < physical_end;
+       p += PAGE_SIZE, v += PAGE_SIZE) {
+    assert(it.virtual_page_address() == v &&
+           "iterator and virtual address out of sync!");
+    map_page(p, it, attrs);
+    while (++it == page_tables::iterator::end(it.level()))
+      it.ascend();
+    while (it.level() != 1)
+      it.allocate_and_descend(allocate);
   }
-  return (void*)virtual_start;
+  return virtual_start;
 }
 
-void *page_tables::map_range_size(uintptr_t physical_start,
-                                uintptr_t virtual_start, size_t size) {
+void *page_tables::map_range_size(uintptr_t physical_start, void *virtual_start,
+                                  size_t size, attributes attrs) {
   // Align size to a multiple of a page
   size = kstd::align_to(size, PAGE_ALIGN);
   return map_range(physical_start, physical_start + size, virtual_start,
-                   virtual_start + size);
+                   (void *)((uintptr_t)virtual_start + size), attrs);
 }
 
-void *page_tables::map_page(uintptr_t physical_page, uintptr_t virtual_page,
-                          attributes attrs) {
-  assert(virtual_page % memory::PAGE_SIZE == 0 &&
+void *page_tables::map_page(uintptr_t physical_page, void *virtual_page,
+                            attributes attrs) {
+  assert((uintptr_t)virtual_page % memory::PAGE_SIZE == 0 &&
+         "virtual address must be page-aligned!");
+  return map_page(physical_page, get(virtual_page), attrs);
+}
+
+void *page_tables::map_page(uintptr_t physical_page, page_tables::iterator it,
+                            attributes attrs) {
+  void *virtual_page = reinterpret_cast<void *>(it.virtual_page_address());
+  assert((uintptr_t)virtual_page % memory::PAGE_SIZE == 0 &&
          "virtual address must be page-aligned!");
   assert(physical_page % memory::PAGE_SIZE == 0 &&
          "physical address must be page-aligned!");
-  auto *page_entry = allocate_page_entry(*this, virtual_page);
+  assert(it.level() == 1 && "iterator must point to a page table entry!");
+  assert(it != page_tables::iterator::end() && it.exists() &&
+         "lookup/allocation failed?");
 
-  if (!page_entry || (*page_entry & PAGE_PRESENT))
+  if (it.present())
     kstd::panic("Tried to map already-present page!\n"
                 "Virtual :%p\n"
                 "Physical:%p\n"
                 "Entry   :%lx\n",
-                (void *)virtual_page, (void *)physical_page, *page_entry);
+                (void *)virtual_page, (void *)physical_page, *it);
 
-  *page_entry = physical_page | attrs | attributes::PRESENT;
+  *it =
+      physical_page | (uintptr_t)attrs | (uintptr_t)attributes::PRESENT;
 
-  return (void*) virtual_page;
+  invlpg((uintptr_t)virtual_page);
+  return virtual_page;
 }
 
-void page_tables::unmap_page(uintptr_t virtual_page) {
-  assert(virtual_page % memory::PAGE_SIZE == 0 &&
+void page_tables::unmap_page(void *virtual_page) {
+  assert((uintptr_t)virtual_page % memory::PAGE_SIZE == 0 &&
          "virtual address should be page-aligned!");
-  auto *page_entry = get_page_entry(*this, virtual_page, false);
+  auto entry = find(virtual_page);
 
-  if (!page_entry || (*page_entry & PAGE_PRESENT) == 0) {
+  if (entry == page_tables::iterator::end() || !entry.exists() ||
+      !entry.present())
     kstd::panic("Tried to unmap non-present page\n"
                 "Virtual:%p",
                 (void *)virtual_page);
-  }
 
-  *page_entry &= ~PAGE_PRESENT;
+  *entry &= ~attributes::PRESENT;
+  invlpg((uintptr_t)virtual_page);
 }
 
-void *page_tables::identity_map_page(uintptr_t address) {
-  return map_page(address, address);
+void page_tables::unmap_range(void *virtual_start, void *virtual_end) {
+  assert((uintptr_t)virtual_start % memory::PAGE_SIZE == 0 &&
+         "virtual start address should be page-aligned!");
+  assert((uintptr_t)virtual_end % memory::PAGE_SIZE == 0 &&
+         "virtual end address should be page-aligned!");
+  for (char *p = (char *)virtual_start; p != virtual_end;
+       p += memory::PAGE_SIZE)
+    unmap_page(p);
 }
 
-void *page_tables::identity_map_range_size(uintptr_t addr, size_t size) {
-  return map_range_size(addr, addr, size);
+void *
+page_tables::identity_map_pages_into_kernel_space(uintptr_t starting_address,
+                                                  size_t n, attributes attrs) {
+  assert(n > 0 && "trying to map 0 pages?");
+  return identity_map_page_range_into_kernel_space(starting_address,
+                                                   n * PAGE_SIZE, attrs);
 }
-void page_tables::dump() const {
+
+void *page_tables::identity_map_page_range_into_kernel_space(uintptr_t address,
+                                                             size_t size,
+                                                             attributes attrs) {
+  return map_range_size(address, (void *)(address + KERNEL_VMA_OFFSET), size,
+                        attrs);
+}
+
+page_tables *allocate_user_space_page_tables() {
+ return nullptr;
+}
+
+void page_tables::dump_to_file(FILE *out) const {
   for (uint64_t i = 0; i < NUM_PAGE_TABLE_ENTRIES; ++i) {
     const uintptr_t pml4_entry = (*base)[i];
-    if ((pml4_entry & PAGE_PRESENT) == 0)
+    if ((pml4_entry & attributes::PRESENT) == 0)
       continue;
 
-    const page_level *pdpt = (page_level*)(pml4_entry & ~PREFIX_MASK);
+    const page_table *pml3 = (page_table *)(pml4_entry & ~PREFIX_MASK);
     for (uint64_t j = 0; j < NUM_PAGE_TABLE_ENTRIES; ++j) {
-      const uintptr_t pdpt_entry = (*pdpt)[j];
-      if ((pdpt_entry & PAGE_PRESENT) == 0)
+      const uintptr_t pml3_entry = (*pml3)[j];
+      if ((pml3_entry & attributes::PRESENT) == 0)
         continue;
 
-      const page_level *pdt = (page_level*)(pdpt_entry & ~PREFIX_MASK);
+      const page_table *pml2 = (page_table *)(pml3_entry & ~PREFIX_MASK);
       for (uint64_t k = 0; k < NUM_PAGE_TABLE_ENTRIES; ++k) {
-        const uintptr_t pdt_entry = (*pdt)[k];
-        if ((pdt_entry & PAGE_PRESENT) == 0)
+        const uintptr_t pml2_entry = (*pml2)[k];
+        if ((pml2_entry & attributes::PRESENT) == 0)
           continue;
 
-        const page_level *pt = (page_level *)(pdt_entry & ~PREFIX_MASK);
+        const page_table *pml1 = (page_table *)(pml2_entry & ~PREFIX_MASK);
         for (uint64_t l = 0; l < NUM_PAGE_TABLE_ENTRIES; ++l) {
-          const uintptr_t pt_entry = (*pt)[l];
-          if ((pt_entry & PAGE_PRESENT) == 0)
+          const uintptr_t pml1_entry = (*pml1)[l];
+          if ((pml1_entry & attributes::PRESENT) == 0)
             continue;
           const uintptr_t virtual_addr =
-              (l << 12) | (k << 21) | (j << 30) | (i << 39);
-          const uintptr_t physical_addr = pt_entry & ADDRESS_MASK;
-          const char *rw_flags = (pt_entry & PAGE_RW) ? "rw" : "r";
-          const char *x_flags = (pt_entry & PAGE_XD) ? "" : "x";
-          debug::printf("Virtual 0x%p -> Physical 0x%p (%s%s)\n",
-                        (void *)virtual_addr, (void *)physical_addr, rw_flags,
-                        x_flags);
+              kstd::sign_extend((l << 12) | (k << 21) | (j << 30) | (i << 39),
+                                /*num_source_bits=*/42);
+          const uintptr_t physical_addr = pml1_entry & ADDRESS_MASK;
+          const char *rw_flags = (pml1_entry & attributes::RW) ? "rw" : "r";
+          const char *x_flags = (pml1_entry & attributes::XD) ? "" : "x";
+          fprintf(out, "Virtual 0x%p -> Physical 0x%p (%s%s)\n",
+                  (void *)virtual_addr, (void *)physical_addr, rw_flags,
+                  x_flags);
         }
       }
     }

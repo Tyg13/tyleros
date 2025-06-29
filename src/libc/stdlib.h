@@ -1,15 +1,17 @@
 #ifndef LIBC_STDLIB_H
 #define LIBC_STDLIB_H
 
+#include "platform_specific.h"
 #include <stddef.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+LIBC_NAMESPACE_BEGIN
 
-void abort(void);
-void *malloc(size_t);
+LIBC_NORETURN void abort(void);
+LIBC_NORETURN void exit(int exit_code);
+void *malloc(size_t size);
 void free(void *);
+
+void *aligned_alloc(size_t alignment, size_t size);
 
 int atexit(void (*)(void));
 int atoi(const char *);
@@ -19,8 +21,6 @@ char *getenv(const char *);
 #define EXIT_FAILURE -1
 #define EXIT_SUCCESS 0
 
-#ifdef __cplusplus
-}
-#endif
+LIBC_NAMESPACE_END
 
 #endif

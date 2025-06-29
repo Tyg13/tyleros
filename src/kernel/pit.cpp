@@ -2,8 +2,8 @@
 #include "pic.h"
 #include "util/io.h"
 
-constexpr static uint8_t PIT_0_DATA = 0x40;
-constexpr static uint8_t PIT_COMMAND = 0x43;
+constexpr static io::port<io::readwrite> PIT_0_DATA{0x40};
+constexpr static io::port<io::readwrite> PIT_COMMAND{0x43};
 
 constexpr static uint8_t PIT_BINARY = 0x0;
 
@@ -15,9 +15,8 @@ constexpr static uint8_t PIT_MODE_3 = 0x3 << 1;
 constexpr static uint8_t PIT_SELECT_CHANNEL_0 = 0x0 << 6;
 
 void init_pit() {
-  asm volatile("pushfq\n\tcli" ::: "memory");
-  io::outb(PIT_COMMAND,
-          PIT_SELECT_CHANNEL_0 | PIT_MODE_2 | PIT_LO_BYTE_HI_BYTE | PIT_BINARY);
+  io::outb(PIT_COMMAND, PIT_SELECT_CHANNEL_0 | PIT_MODE_2 |
+                            PIT_LO_BYTE_HI_BYTE | PIT_BINARY);
   // The base reload frequency is divided by the reload count to obtain the
   // final PIT frequency. Since the reload count is 16 bit, max is technically
   // 0xFFFF, but a value of 0 is interpreted as meaning a reload count of
@@ -30,6 +29,5 @@ void init_pit() {
   io::outb(PIT_0_DATA, reload_count_hi);
 
   // Unmask the PIT interrupt
-  unmask_irq(irq::PIT);
-  asm volatile("popfq\n\tsti" ::: "memory");
+  pic::unmask_irq(irq::PIT);
 }

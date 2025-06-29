@@ -5,14 +5,13 @@
 #include <stdint.h>
 
 namespace pma {
-void init();
-void *get_physical_page();
+void early_init();
+void finish_init();
+uintptr_t get_physical_page();
+uintptr_t get_contiguous_physical_pages(size_t n);
 void free_physical_page(void *page);
 
 extern bool physical_memory_allocator_available;
-
-uintptr_t *get_base_of_page_stack();
-size_t get_size_of_page_stack();
 } // namespace pma
 
 #endif
